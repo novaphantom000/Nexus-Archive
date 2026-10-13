@@ -7,6 +7,7 @@ import com.nexusarchive.android.NexusApplication
 import com.nexusarchive.android.core.Arrange
 import com.nexusarchive.android.core.ConflictResolution
 import com.nexusarchive.android.core.FileCommands
+import com.nexusarchive.android.core.FileEntry
 import com.nexusarchive.android.core.FilterKind
 import com.nexusarchive.android.core.Formatters
 import com.nexusarchive.android.core.ListFailureReason
