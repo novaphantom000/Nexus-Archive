@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lets the app hand out content:// URIs for files the user explicitly opens or shares. -->
+<paths>
+    <root-path name="root" path="." />
+</paths>
