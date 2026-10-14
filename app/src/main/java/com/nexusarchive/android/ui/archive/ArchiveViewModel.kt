@@ -10,8 +10,13 @@ import com.nexusarchive.android.archive.ArchiveFormat
 import com.nexusarchive.android.archive.ArchiveFormats
 import com.nexusarchive.android.archive.ArchiveJobs
 import com.nexusarchive.android.archive.ArchiveListing
+import com.nexusarchive.android.archive.ArchiveSortField
 import com.nexusarchive.android.core.ConflictResolution
+import com.nexusarchive.android.core.NoProgress
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -33,10 +38,21 @@ data class ArchiveUiState(
     val checkingPassword: Boolean = false,
     val currentDir: String = "",
     val selection: Set<String> = emptySet(),
+    val searchActive: Boolean = false,
+    val query: String = "",
+    val sortField: ArchiveSortField = ArchiveSortField.NAME,
+    val sortAscending: Boolean = true,
+    val grid: Boolean = false,
+    val staging: Boolean = false,
 )
 
+/** Why files are being pulled out of the archive into the app's cache. */
+enum class StagePurpose { OPEN, OPEN_WITH, SHARE, COPY }
+
+class StagedFiles(val purpose: StagePurpose, val files: List<File>)
+
 /** Which action is waiting for a password before it can start. */
-enum class PendingAction { NONE, EXTRACT, TEST }
+enum class PendingAction { NONE, EXTRACT, TEST, STAGE }
 
 class ArchiveViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -55,6 +71,11 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
     /** Set when the user chose Extract/Test on a password-protected archive and still has to enter the password. */
     val pendingAction = MutableStateFlow(PendingAction.NONE)
     private var pendingExtract: ExtractRequest? = null
+
+    private val _staged = MutableSharedFlow<StagedFiles>(extraBufferCapacity = 4)
+    val staged: SharedFlow<StagedFiles> = _staged.asSharedFlow()
+    private var stagingJob: Job? = null
+    private var pendingStage: Pair<StagePurpose, Set<String>>? = null
 
     data class ExtractRequest(val intoFolderNamedAfterArchive: Boolean, val resolution: ConflictResolution, val selectedOnly: Boolean)
 
@@ -130,6 +151,80 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
 
     fun selectAllIn(paths: List<String>) {
         _ui.update { it.copy(selection = it.selection + paths) }
+    }
+
+    fun selectOnly(path: String) {
+        _ui.update { it.copy(selection = setOf(path)) }
+    }
+
+    fun invertIn(paths: List<String>) {
+        _ui.update { state -> state.copy(selection = paths.filter { it !in state.selection }.toSet()) }
+    }
+
+    fun setSearchActive(active: Boolean) {
+        _ui.update { it.copy(searchActive = active, query = if (active) it.query else "") }
+    }
+
+    fun setQuery(text: String) {
+        _ui.update { it.copy(query = text) }
+    }
+
+    fun setSortField(field: ArchiveSortField) {
+        _ui.update { it.copy(sortField = field) }
+    }
+
+    fun toggleSortDirection() {
+        _ui.update { it.copy(sortAscending = !it.sortAscending) }
+    }
+
+    fun toggleGrid() {
+        _ui.update { it.copy(grid = !it.grid) }
+    }
+
+    fun postMessage(text: String) {
+        _messages.tryEmit(text)
+    }
+
+    /**
+     * Extracts [paths] into the app's cache so they can be opened, shared or copied. The files are removed
+     * the next time the app starts. Password-protected archives ask for the password first.
+     */
+    fun stage(purpose: StagePurpose, paths: Set<String>) {
+        val archive = File(loadedPath ?: return)
+        if (paths.isEmpty()) return
+        if (needsPasswordNow()) {
+            pendingStage = purpose to paths
+            pendingAction.value = PendingAction.STAGE
+            _ui.update { it.copy(passwordRequired = true, passwordError = null) }
+            return
+        }
+        stagingJob?.cancel()
+        stagingJob = viewModelScope.launch {
+            _ui.update { it.copy(staging = true) }
+            try {
+                val dir = File(app.cacheDir, "archive-open/${System.nanoTime()}")
+                val outcome = engine.extract(archive, dir, paths, password, ConflictResolution.REPLACE, NoProgress)
+                val files = withContext(Dispatchers.IO) { paths.map { File(dir, it) }.filter { it.exists() } }
+                if (files.isEmpty()) {
+                    postMessage(outcome.failures.firstOrNull()?.message ?: "Couldn't prepare the file.")
+                } else {
+                    _staged.emit(StagedFiles(purpose, files))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ArchiveException) {
+                postMessage(e.message ?: "Couldn't prepare the file.")
+            } catch (e: Exception) {
+                postMessage(e.message ?: "Couldn't prepare the file.")
+            } finally {
+                _ui.update { it.copy(staging = false) }
+            }
+        }
+    }
+
+    fun cancelStaging() {
+        stagingJob?.cancel()
+        _ui.update { it.copy(staging = false) }
     }
 
     fun clearSelection() {
@@ -222,10 +317,12 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
         when (pendingAction.value) {
             PendingAction.TEST -> startTest()
             PendingAction.EXTRACT -> pendingExtract?.let { startExtract(it) }
+            PendingAction.STAGE -> pendingStage?.let { stage(it.first, it.second) }
             PendingAction.NONE -> {}
         }
         pendingAction.value = PendingAction.NONE
         pendingExtract = null
+        pendingStage = null
     }
 
     private fun startTest() {
@@ -245,6 +342,7 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
         val dest = if (request.intoFolderNamedAfterArchive) File(parent, ArchiveFormats.baseName(archive.name)) else parent
         val selection: Set<String>? = if (request.selectedOnly) _ui.value.selection.toSet() else null
         ArchiveJobs.extract(app.operations, archive, dest, selection, password, request.resolution)
+        if (selection != null) clearSelection()
         _messages.tryEmit("Extraction started. Progress appears under Operations.")
     }
 }

@@ -7,6 +7,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import java.io.File
 import com.nexusarchive.android.data.SettingsRepository
 import com.nexusarchive.android.operations.OperationManager
 import com.nexusarchive.android.operations.OperationService
@@ -21,6 +22,8 @@ class NexusApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Temporary copies made by the archive browser (open, share, copy) are removed on every start.
+        appScope.launch(Dispatchers.IO) { File(cacheDir, "archive-open").deleteRecursively() }
         // Run the foreground service whenever at least one operation is active.
         appScope.launch {
             operations.operations

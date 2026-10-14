@@ -4,10 +4,11 @@ An Android file manager (Kotlin, Jetpack Compose, Material 3) that is growing in
 
 > **Verification status (read this first)**
 >
-> - **0.1.0**, **0.2.0** and **0.2.1** were built by the GitHub Action and reported green by the project owner
->   (0.2.0 also ran the unit tests). That is the owner's report; it says nothing about device behaviour.
-> - **0.3.0** (this version) is a large UI change. **None of it has been compiled, run or tested.** It was written in an
->   environment with no Android SDK, Gradle or network.
+> - **0.1.0 to 0.3.1** were built by the GitHub Action; the project owner installed 0.3.x and sent a screenshot of it
+>   running. That is the owner's report; it says nothing about every feature.
+> - **0.4.0** (this version) reworks the archive browser, the navigation bar overlay and the archive menu in the
+>   file browser. **None of it has been compiled, run or tested.** It was written in an environment with no Android
+>   SDK, Gradle or network.
 > - Treat everything marked "source only" as unproven until a green run and a device test say otherwise.
 >   If a run is red, copy the **first** error line from the failing step.
 
@@ -65,6 +66,21 @@ writes; symlinks never followed; operations screen with real counters and cancel
 
 Limits: Android 15 caps how long a data-sync foreground service may run; the service stops cleanly when told to, which would
 end its protection for very long jobs. Operations still do not survive the process being killed.
+
+### New in 0.4.0 (source only, never compiled)
+
+| Area | What changed | Where |
+|---|---|---|
+| Nav bar | The floating pill is now drawn **over** the content, so lists scroll behind it instead of stopping above a solid bar. Screens add `LocalFloatingBarInset` as bottom padding, and floating buttons, snackbars and the paste bar are lifted above it | `NexusAppRoot`, `LocalFloatingBarInset` |
+| Archive layout | Same layout as the file browser: back, archive name with a location dropdown (storage, Quick access, external storage), search, sort, grid/list, menu; path bar underneath; Extract as the floating button | `ArchiveScreen` |
+| Archive selection | Selects only when you tap the icon or long-press. Tapping a folder opens it; tapping a file asks **Open** or **Extract** | `ArchiveScreen.nodeClick` |
+| Archive selection bar | Copy, share, select all, invert, and a menu with Extract, Open with, Rename (disabled, see below) and Properties | `ArchiveScreen` |
+| Opening files from an archive | Open, Open with, Share and Copy first extract a temporary copy into the app cache (removed at the next app start). Copy puts the temporary files on the file browser's clipboard so you can paste them into a folder | `ArchiveViewModel.stage` |
+| Archive search / sort / view | Search names anywhere in the archive; sort by name, size, date or type (folders first); list or grid | `ArchiveTree.sorted/search` |
+| Archive menu in the browser | Tapping an archive opens a bottom sheet: View, Extract here, Extract to ./name/, Extract..., Test, Compress. Password-protected archives are handed to the archive screen, which has the password prompt | `ArchiveActionSheet`, `ArchiveQuickActions` |
+
+Not possible yet: a **New** button inside an archive, and **Rename** of archive entries. Both need archive editing
+(add, replace, rename entries), which is not built. Rename is shown disabled; the main button is Extract.
 
 ### New in 0.3.0 (source only, never compiled)
 

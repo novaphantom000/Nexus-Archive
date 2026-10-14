@@ -351,6 +351,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /** Puts already-existing files on the clipboard (used by the archive browser after extracting to cache). */
+    fun copyPaths(paths: List<String>) {
+        if (paths.isEmpty()) return
+        _ui.update { it.copy(clipboard = FileClipboard(paths, ClipboardMode.COPY), selection = emptySet()) }
+    }
+
     /** Adds every selected folder to Quick access (the bookmark list). Files in the selection are ignored. */
     fun addToQuickAccess(entries: List<FileEntry>) {
         val folders = entries.filter { it.isDirectory }

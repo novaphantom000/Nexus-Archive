@@ -1,7 +1,32 @@
 package com.nexusarchive.android.archive
 
+enum class ArchiveSortField { NAME, SIZE, DATE, TYPE }
+
 /** Builds the folder view of a flat entry list. Pure and unit-tested. */
 object ArchiveTree {
+
+    /** Folders always stay first; [field] and [ascending] order the rest. */
+    fun sorted(nodes: List<TreeNode>, field: ArchiveSortField, ascending: Boolean): List<TreeNode> {
+        val byField: Comparator<TreeNode> = when (field) {
+            ArchiveSortField.NAME -> compareBy<TreeNode> { it.name.lowercase() }
+            ArchiveSortField.SIZE -> compareBy<TreeNode> { it.size }
+            ArchiveSortField.DATE -> compareBy<TreeNode> { it.modifiedMs }
+            ArchiveSortField.TYPE -> compareBy<TreeNode> { it.name.substringAfterLast('.', "").lowercase() }
+                .thenBy { it.name.lowercase() }
+        }
+        val ordered: Comparator<TreeNode> = if (ascending) byField else byField.reversed()
+        return nodes.sortedWith(compareByDescending<TreeNode> { it.isDirectory }.then(ordered))
+    }
+
+    /** Every entry anywhere in the archive whose own name contains [query] (case-insensitive). */
+    fun search(entries: List<ArchiveEntryInfo>, query: String): List<TreeNode> {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return emptyList()
+        return entries
+            .filter { it.path.substringAfterLast('/').lowercase().contains(q) }
+            .map { TreeNode(it.path.substringAfterLast('/'), it.path, it.isDirectory, it.size, it.modifiedMs, it.encrypted) }
+    }
+
 
     /** Immediate children of [dir] ("" is the archive root). Folders first, then files, each sorted by name. */
     fun children(entries: List<ArchiveEntryInfo>, dir: String): List<TreeNode> {

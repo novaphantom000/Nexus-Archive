@@ -1,5 +1,15 @@
 package com.nexusarchive.android.ui
 
+import com.nexusarchive.android.ui.components.buildLocationOptions
+import com.nexusarchive.android.NexusApplication
+import androidx.compose.foundation.layout.navigationBars
+import com.nexusarchive.android.ui.components.LocalFloatingBarInset
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.background
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -233,10 +243,28 @@ private fun AppScaffold(settings: AppSettings, settingsVm: SettingsViewModel, sy
                 )
             }
             composable(ROUTE_ARCHIVE) {
+                val browseUi by browserVm.ui.collectAsStateWithLifecycle()
+                val safBookmarks by remember { (context.applicationContext as NexusApplication).safStorage.bookmarks }
+                    .collectAsStateWithLifecycle(initialValue = emptyList())
+                val locations = remember(browseUi.volumes, settings.bookmarks, safBookmarks) {
+                    buildLocationOptions(browseUi.volumes, settings.bookmarks, safBookmarks)
+                }
                 ArchiveScreen(
                     path = archivePath,
+                    locations = locations,
+                    onPickLocation = { option ->
+                        navController.popBackStack()
+                        if (option.path != null) {
+                            browserVm.navigateTo(option.path)
+                            navigate(Destination.Browse)
+                        } else if (option.safId != null) {
+                            safStorageId = option.safId
+                            navController.navigate(ROUTE_SAF)
+                        }
+                    },
                     onBack = { navController.popBackStack() },
                     onOpenOperations = { navigate(Destination.Operations) },
+                    onCopyToClipboard = { paths -> browserVm.copyPaths(paths) },
                 )
             }
             composable(ROUTE_STORAGE) {
@@ -270,25 +298,30 @@ private fun AppScaffold(settings: AppSettings, settingsVm: SettingsViewModel, sy
         }
     }
 
-    // One floating navigation bar for every screen size. It is hidden on the full-screen search page,
-    // where the keyboard would otherwise push it up over the results.
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        bottomBar = {
-            if (!onSearchRoute) {
-                FloatingNavBar(
-                    items = tabs.map { NavItem(it.label, it.icon, if (it == Destination.Operations) activeCount else 0) },
-                    selectedIndex = selectedIndex,
-                    onSelect = { navigate(tabs[it]) },
-                    onSearch = ::openSearch,
-                )
-            }
-        },
-    ) { inner ->
-        Box(
-            Modifier
-                .padding(inner)
-                .consumeWindowInsets(inner),
-        ) { navHost() }
+    // One floating navigation bar for every screen size, drawn over the content so lists scroll behind it.
+    // Screens add LocalFloatingBarInset as bottom padding so their last items stay reachable. The bar is hidden
+    // on the full-screen search page, where the keyboard would otherwise push it up over the results.
+    var barHeightPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val systemNavPx = WindowInsets.navigationBars.getBottom(density)
+    val barInset = if (onSearchRoute || barHeightPx == 0) 0.dp else with(density) { (barHeightPx - systemNavPx).coerceAtLeast(0).toDp() }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        CompositionLocalProvider(LocalFloatingBarInset provides barInset) { navHost() }
+        if (!onSearchRoute) {
+            FloatingNavBar(
+                items = tabs.map { NavItem(it.label, it.icon, if (it == Destination.Operations) activeCount else 0) },
+                selectedIndex = selectedIndex,
+                onSelect = { navigate(tabs[it]) },
+                onSearch = ::openSearch,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .onSizeChanged { barHeightPx = it.height },
+            )
+        }
     }
 }

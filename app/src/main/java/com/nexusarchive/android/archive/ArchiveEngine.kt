@@ -212,6 +212,19 @@ class ArchiveEngine(private val bufferSize: Int = 64 * 1024) {
         return ArchiveListing(format, entries, false, unsafe)
     }
 
+    /** True when the archive can't be read without a password. Other problems are left for the real operation to report. */
+    suspend fun needsPassword(archive: File): Boolean = withContext(Dispatchers.IO) {
+        try {
+            list(archive, null).encrypted
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: ArchiveException) {
+            e.kind == ArchiveException.Kind.PASSWORD_REQUIRED
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Password check (ZIP only; the only listed format where a wrong password can be told apart early)
     // ---------------------------------------------------------------------------------------------

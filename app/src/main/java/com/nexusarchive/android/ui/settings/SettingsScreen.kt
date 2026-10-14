@@ -2,6 +2,7 @@
 
 package com.nexusarchive.android.ui.settings
 
+import com.nexusarchive.android.ui.components.LocalFloatingBarInset
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.clickable
@@ -85,6 +86,7 @@ fun SettingsScreen(
                 modifier = Modifier
                     .widthIn(max = 720.dp)
                     .verticalScroll(rememberScrollState())
+                    .padding(bottom = LocalFloatingBarInset.current)
                     .padding(bottom = 32.dp),
             ) {
                     SectionHeader("Appearance")

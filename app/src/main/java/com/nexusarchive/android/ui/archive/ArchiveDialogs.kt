@@ -159,3 +159,37 @@ fun ExtractDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
+
+/** Details of one archive entry. Anything the archive doesn't record is shown as unavailable, never guessed. */
+@Composable
+fun EntryPropertiesDialog(
+    node: com.nexusarchive.android.archive.TreeNode,
+    info: com.nexusarchive.android.archive.ArchiveEntryInfo?,
+    onDismiss: () -> Unit,
+) {
+    val unavailable = "Unavailable"
+    val rows = listOf(
+        "Name" to node.name,
+        "Location in archive" to node.path,
+        "Type" to if (node.isDirectory) "Folder" else (node.name.substringAfterLast('.', "").uppercase().ifEmpty { "File" }),
+        "Size" to if (node.isDirectory || node.size < 0) unavailable else com.nexusarchive.android.core.Formatters.bytes(node.size),
+        "Packed size" to if (info == null || info.compressedSize < 0) unavailable else com.nexusarchive.android.core.Formatters.bytes(info.compressedSize),
+        "Modified" to if (node.modifiedMs > 0) com.nexusarchive.android.core.Formatters.dateTime(node.modifiedMs) else unavailable,
+        "Password protected" to if (node.encrypted) "Yes" else "No",
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Properties") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                rows.forEach { (label, value) ->
+                    Column {
+                        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(value, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}

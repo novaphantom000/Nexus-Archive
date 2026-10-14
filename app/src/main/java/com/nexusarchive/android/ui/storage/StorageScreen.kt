@@ -2,6 +2,7 @@
 
 package com.nexusarchive.android.ui.storage
 
+import com.nexusarchive.android.ui.components.LocalFloatingBarInset
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -136,9 +137,10 @@ fun StorageScreen(
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = LocalFloatingBarInset.current)) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
+                modifier = Modifier.padding(bottom = LocalFloatingBarInset.current),
                 onClick = { showAdd = true },
                 icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
                 text = { Text("Add storage") },
@@ -148,7 +150,7 @@ fun StorageScreen(
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
             LazyColumn(
                 modifier = Modifier.widthIn(max = 720.dp).fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp + LocalFloatingBarInset.current),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item {

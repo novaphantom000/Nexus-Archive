@@ -38,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +50,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nexusarchive.android.ui.theme.LocalReduceMotion
 import com.nexusarchive.android.ui.theme.Motion
+
+/** Height the floating navigation pill covers at the bottom of the screen. Scrollable content adds it as bottom padding. */
+val LocalFloatingBarInset = compositionLocalOf { 0.dp }
 
 data class NavItem(val label: String, val icon: ImageVector, val badge: Int = 0)
 

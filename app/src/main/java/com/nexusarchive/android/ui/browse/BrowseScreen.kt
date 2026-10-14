@@ -2,6 +2,12 @@
 
 package com.nexusarchive.android.ui.browse
 
+import com.nexusarchive.android.ui.archive.ExtractDialog
+import kotlinx.coroutines.launch
+import com.nexusarchive.android.ui.components.buildLocationOptions
+import com.nexusarchive.android.ui.components.LocationPickerTitle
+import com.nexusarchive.android.ui.components.LocationOption
+import com.nexusarchive.android.ui.components.LocalFloatingBarInset
 import androidx.compose.ui.draw.clip
 import com.nexusarchive.android.ui.storage.safKindIcon
 import com.nexusarchive.android.ui.components.SelectionPill
@@ -202,6 +208,9 @@ private fun BrowseContent(
     var renameTarget by remember { mutableStateOf<FileEntry?>(null) }
     var propertiesTarget by remember { mutableStateOf<FileEntry?>(null) }
     var compressTargets by remember { mutableStateOf<List<FileEntry>?>(null) }
+    var archiveSheetTarget by remember { mutableStateOf<FileEntry?>(null) }
+    var extractChooseTarget by remember { mutableStateOf<FileEntry?>(null) }
+    val archiveScope = androidx.compose.runtime.rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         vm.messages.collect { snackbar.showSnackbar(it) }
@@ -210,19 +219,7 @@ private fun BrowseContent(
     val canGoUp = parentOf(ui.currentPath, ui.volumes) != null
 
     val locations = remember(ui.volumes, settings.bookmarks, safBookmarks) {
-        val list = ArrayList<LocationOption>()
-        for (volume in ui.volumes) {
-            list.add(
-                LocationOption("Storage", volume.label, if (volume.isRemovable) Icons.Rounded.SdCard else Icons.Rounded.Storage, volume.path, null),
-            )
-        }
-        for (path in settings.bookmarks) {
-            list.add(LocationOption("Quick access", File(path).name.ifEmpty { path }, Icons.Rounded.Folder, path, null))
-        }
-        for (b in safBookmarks) {
-            list.add(LocationOption("Added external storage", b.label, safKindIcon(b.kind), null, b.id))
-        }
-        list
+        buildLocationOptions(ui.volumes, settings.bookmarks, safBookmarks)
     }
     BackHandler(enabled = ui.selection.isNotEmpty() || ui.searchActive || canGoUp) {
         when {
@@ -340,17 +337,20 @@ private fun BrowseContent(
             ) {
                 val clip = ui.clipboard ?: lastClipboard.value
                 if (clip != null) {
-                    ClipboardBar(
-                        clipboard = clip,
-                        canPaste = ui.canWriteHere,
-                        onPaste = vm::paste,
-                        onClear = vm::clearClipboard,
-                    )
+                    Box(Modifier.padding(bottom = LocalFloatingBarInset.current)) {
+                        ClipboardBar(
+                            clipboard = clip,
+                            canPaste = ui.canWriteHere,
+                            onPaste = vm::paste,
+                            onClear = vm::clearClipboard,
+                        )
+                    }
                 }
             }
         },
         floatingActionButton = {
             AnimatedVisibility(
+                modifier = Modifier.padding(bottom = LocalFloatingBarInset.current),
                 visible = mode == TopBarMode.NORMAL && ui.canWriteHere && ui.clipboard == null,
                 enter = fadeIn(Motion.effects(reduce)),
                 exit = fadeOut(Motion.effects(reduce)),
@@ -364,7 +364,7 @@ private fun BrowseContent(
                 )
             }
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = LocalFloatingBarInset.current)) },
     ) { padding ->
         Column(
             Modifier
@@ -442,7 +442,7 @@ private fun BrowseContent(
                                     if (reason != null) {
                                         vm.postMessage("$reason Use More actions > Open with to try another app.")
                                     } else {
-                                        onOpenArchive(entry.path)
+                                        archiveSheetTarget = entry
                                     }
                                 }
                                 else -> {
@@ -545,6 +545,68 @@ private fun BrowseContent(
         PropertiesDialog(entry = entry, onDismiss = { propertiesTarget = null })
     }
 
+    archiveSheetTarget?.let { entry ->
+        val archive = File(entry.path)
+        ArchiveActionSheet(
+            entry = entry,
+            onDismiss = { archiveSheetTarget = null },
+            onView = {
+                archiveSheetTarget = null
+                onOpenArchive(entry.path)
+            },
+            onExtractHere = {
+                archiveSheetTarget = null
+                archiveScope.launch {
+                    ArchiveQuickActions.extract(context, archive, false, ConflictResolution.KEEP_BOTH, vm::postMessage) { onOpenArchive(entry.path) }
+                }
+            },
+            onExtractToFolder = {
+                archiveSheetTarget = null
+                archiveScope.launch {
+                    ArchiveQuickActions.extract(context, archive, true, ConflictResolution.KEEP_BOTH, vm::postMessage) { onOpenArchive(entry.path) }
+                }
+            },
+            onExtractChoose = {
+                archiveSheetTarget = null
+                extractChooseTarget = entry
+            },
+            onTest = {
+                archiveSheetTarget = null
+                archiveScope.launch {
+                    ArchiveQuickActions.test(context, archive, vm::postMessage) { onOpenArchive(entry.path) }
+                }
+            },
+            onCompress = {
+                archiveSheetTarget = null
+                if (ui.canWriteHere) {
+                    compressTargets = listOf(entry)
+                } else {
+                    vm.postMessage("This folder is read-only, so an archive can't be created here.")
+                }
+            },
+        )
+    }
+
+    extractChooseTarget?.let { entry ->
+        ExtractDialog(
+            selectedCount = 0,
+            archiveBaseName = ArchiveFormats.baseName(entry.name),
+            onStart = { request ->
+                extractChooseTarget = null
+                archiveScope.launch {
+                    ArchiveQuickActions.extract(
+                        context,
+                        File(entry.path),
+                        request.intoFolderNamedAfterArchive,
+                        request.resolution,
+                        vm::postMessage,
+                    ) { onOpenArchive(entry.path) }
+                }
+            },
+            onDismiss = { extractChooseTarget = null },
+        )
+    }
+
     compressTargets?.let { targets ->
         CompressDialog(
             sources = targets,
@@ -581,15 +643,6 @@ private fun BrowseContent(
 
 // ---- top bars ---------------------------------------------------------------------------------
 
-/** One entry of the location picker in the Browse title: a local folder or a saved external storage. */
-private class LocationOption(
-    val section: String,
-    val label: String,
-    val icon: ImageVector,
-    val path: String?,
-    val safId: String?,
-)
-
 @Composable
 private fun NormalTopBar(
     title: String,
@@ -612,55 +665,7 @@ private fun NormalTopBar(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     TopAppBar(
-        title = {
-            var pickerOpen by remember { mutableStateOf(false) }
-            Box {
-                Row(
-                    modifier = Modifier
-                        .clip(MaterialTheme.shapes.large)
-                        .clickable(onClickLabel = "Choose location") { pickerOpen = true }
-                        .padding(vertical = 2.dp)
-                        .padding(start = 4.dp, end = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column {
-                        Text(title, maxLines = 1, style = MaterialTheme.typography.titleLarge)
-                        if (subtitle.isNotEmpty()) {
-                            Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    Icon(Icons.Rounded.ArrowDropDown, contentDescription = "Choose location")
-                }
-                DropdownMenu(expanded = pickerOpen, onDismissRequest = { pickerOpen = false }) {
-                    var lastSection = ""
-                    locations.forEach { option ->
-                        if (option.section != lastSection) {
-                            if (lastSection.isNotEmpty()) androidx.compose.material3.HorizontalDivider()
-                            Text(
-                                option.section,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                            )
-                            lastSection = option.section
-                        }
-                        DropdownMenuItem(
-                            text = { Text(option.label, maxLines = 1) },
-                            leadingIcon = { Icon(option.icon, contentDescription = null) },
-                            onClick = {
-                                pickerOpen = false
-                                onPickLocation(option)
-                            },
-                        )
-                    }
-                }
-            }
-        },
-        navigationIcon = {
-            if (canGoUp) {
-                IconButton(onClick = onUp) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Go to parent folder") }
-            }
-        },
+        title = { LocationPickerTitle(title = title, subtitle = subtitle, locations = locations, onPick = onPickLocation) },
         actions = {
             IconButton(onClick = onSearch) { Icon(Icons.Rounded.Search, contentDescription = "Search in this folder") }
             IconButton(onClick = onSortFilter) { Icon(Icons.Rounded.FilterList, contentDescription = "Sort and filter") }
@@ -854,7 +859,7 @@ private fun FileCollection(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 112.dp),
+            contentPadding = PaddingValues(bottom = 112.dp + LocalFloatingBarInset.current),
         ) {
             items(entries, key = { it.path }) { entry ->
                 FileListItem(
@@ -876,7 +881,7 @@ private fun FileCollection(
             columns = GridCells.Adaptive(minSize = 120.dp),
             state = gridState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 112.dp),
+            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 112.dp + LocalFloatingBarInset.current),
         ) {
             items(entries, key = { it.path }) { entry ->
                 FileGridItem(

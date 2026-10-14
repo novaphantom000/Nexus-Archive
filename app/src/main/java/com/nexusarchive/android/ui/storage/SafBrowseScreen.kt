@@ -2,6 +2,7 @@
 
 package com.nexusarchive.android.ui.storage
 
+import com.nexusarchive.android.ui.components.LocalFloatingBarInset
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -13,6 +14,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -183,7 +185,7 @@ fun SafBrowseScreen(
                 )
             }
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = LocalFloatingBarInset.current)) },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             val failure = ui.failure
@@ -211,7 +213,7 @@ fun SafBrowseScreen(
                             message = if (ui.canCreateHere) "Use the buttons above to add a folder or copy files here." else "This location is read-only.",
                         )
                     } else {
-                        LazyColumn(Modifier.fillMaxSize()) {
+                        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp + LocalFloatingBarInset.current)) {
                             items(ui.items, key = { it.documentId }) { item ->
                                 val isSelected = item.documentId in ui.selection
                                 ListItem(

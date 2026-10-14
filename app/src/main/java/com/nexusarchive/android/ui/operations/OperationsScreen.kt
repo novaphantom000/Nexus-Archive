@@ -2,6 +2,7 @@
 
 package com.nexusarchive.android.ui.operations
 
+import com.nexusarchive.android.ui.components.LocalFloatingBarInset
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -99,7 +100,7 @@ fun OperationsScreen(vm: OperationsViewModel) {
             } else {
                 LazyColumn(
                     modifier = Modifier.widthIn(max = 720.dp),
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + LocalFloatingBarInset.current),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(operations, key = { it.id }) { op ->

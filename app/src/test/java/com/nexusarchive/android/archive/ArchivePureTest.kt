@@ -113,4 +113,23 @@ class ArchivePureTest {
         assertTrue(ArchiveTree.isSelected("docs", setOf("docs")))
         assertTrue(!ArchiveTree.isSelected("docs2/a.txt", setOf("docs")))
     }
+
+    @Test
+    fun sortKeepsFoldersFirstAndHonoursDirection() {
+        val nodes = listOf(
+            TreeNode("b.txt", "b.txt", false, 5, 0, false),
+            TreeNode("a.txt", "a.txt", false, 10, 0, false),
+            TreeNode("z", "z", true, -1, 0, false),
+        )
+        assertEquals(listOf("z", "a.txt", "b.txt"), ArchiveTree.sorted(nodes, ArchiveSortField.NAME, true).map { it.name })
+        assertEquals(listOf("z", "b.txt", "a.txt"), ArchiveTree.sorted(nodes, ArchiveSortField.NAME, false).map { it.name })
+        assertEquals(listOf("z", "b.txt", "a.txt"), ArchiveTree.sorted(nodes, ArchiveSortField.SIZE, true).map { it.name })
+    }
+
+    @Test
+    fun searchFindsNamesAnywhereInTheArchive() {
+        val entries = listOf(entry("docs/Report.txt"), entry("docs/sub/report-final.pdf"), entry("other.bin"))
+        assertEquals(listOf("Report.txt", "report-final.pdf"), ArchiveTree.search(entries, "report").map { it.name })
+        assertTrue(ArchiveTree.search(entries, "  ").isEmpty())
+    }
 }

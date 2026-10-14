@@ -2,6 +2,7 @@
 
 package com.nexusarchive.android.ui.home
 
+import com.nexusarchive.android.ui.components.LocalFloatingBarInset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -97,7 +98,7 @@ fun HomeScreen(
 
     val active = operations.filter { it.isActive }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    Scaffold(snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = LocalFloatingBarInset.current)) }) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -108,7 +109,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .widthIn(max = 720.dp)
                     .fillMaxHeight(),
-                contentPadding = PaddingValues(bottom = 32.dp),
+                contentPadding = PaddingValues(bottom = 32.dp + LocalFloatingBarInset.current),
             ) {
                 item { HomeHeader(onOpenSettings) }
                 item { SearchEntry(onSearch) }
