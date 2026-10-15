@@ -54,6 +54,7 @@ import com.nexusarchive.android.core.Formatters
 import com.nexusarchive.android.core.SortField
 import com.nexusarchive.android.data.AppSettings
 import com.nexusarchive.android.data.LayoutDensity
+import com.nexusarchive.android.data.ViewMode
 import com.nexusarchive.android.ui.components.SelectableLeading
 import com.nexusarchive.android.ui.theme.LocalReduceMotion
 import com.nexusarchive.android.ui.theme.Motion

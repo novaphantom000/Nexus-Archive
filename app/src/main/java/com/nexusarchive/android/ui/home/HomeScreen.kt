@@ -89,15 +89,15 @@ fun HomeScreen(
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val safBookmarks by remember { (context.applicationContext as NexusApplication).safStorage.bookmarks }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val shownRecentDirs = remember(settings.recentDirs, settings.recentsRespectHidden) {
         if (settings.recentsRespectHidden) settings.recentDirs.filter { RecentsFilter.isAllowed(it) } else settings.recentDirs
     }
     val shownRecentFiles = remember(settings.recentFiles, settings.recentsRespectHidden) {
         if (settings.recentsRespectHidden) settings.recentFiles.filter { RecentsFilter.isAllowed(it) } else settings.recentFiles
     }
-    val safBookmarks by remember { (context.applicationContext as NexusApplication).safStorage.bookmarks }
-        .collectAsStateWithLifecycle(initialValue = emptyList())
-    val settings by vm.settings.collectAsStateWithLifecycle()
     val operations by vm.operations.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
