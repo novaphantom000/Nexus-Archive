@@ -1,5 +1,10 @@
 package com.nexusarchive.android.ui
 
+import com.nexusarchive.android.ui.components.LocalBarsCollapsed
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import com.nexusarchive.android.ui.components.buildLocationOptions
 import com.nexusarchive.android.NexusApplication
 import androidx.compose.foundation.layout.navigationBars
@@ -111,7 +116,12 @@ fun NexusAppRoot() {
         Box(Modifier.fillMaxSize())
     } else {
         CompositionLocalProvider(LocalReduceMotion provides (current.reduceMotion || systemAnimationsOff)) {
-            NexusTheme(themeMode = current.themeMode, dynamicColor = current.dynamicColor) {
+            NexusTheme(
+                themeMode = current.themeMode,
+                themeStyle = current.themeStyle,
+                presetId = current.themePreset,
+                liquidGlass = current.liquidGlass,
+            ) {
                 AppScaffold(current, settingsVm, systemAnimationsOff)
             }
         }
@@ -306,13 +316,30 @@ private fun AppScaffold(settings: AppSettings, settingsVm: SettingsViewModel, sy
     val systemNavPx = WindowInsets.navigationBars.getBottom(density)
     val barInset = if (onSearchRoute || barHeightPx == 0) 0.dp else with(density) { (barHeightPx - systemNavPx).coerceAtLeast(0).toDp() }
 
+    // Moving further down a list tucks the floating buttons away and shrinks the pill; moving back up restores them.
+    var barsCollapsed by remember { mutableStateOf(false) }
+    LaunchedEffect(currentDestination?.route) { barsCollapsed = false }
+    val scrollWatcher = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -6f) barsCollapsed = true else if (available.y > 6f) barsCollapsed = false
+                return Offset.Zero
+            }
+        }
+    }
+
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            .nestedScroll(scrollWatcher),
     ) {
-        CompositionLocalProvider(LocalFloatingBarInset provides barInset) { navHost() }
+        CompositionLocalProvider(
+            LocalFloatingBarInset provides barInset,
+            LocalBarsCollapsed provides barsCollapsed,
+        ) { navHost() }
         if (!onSearchRoute) {
+            CompositionLocalProvider(LocalBarsCollapsed provides barsCollapsed) {
             FloatingNavBar(
                 items = tabs.map { NavItem(it.label, it.icon, if (it == Destination.Operations) activeCount else 0) },
                 selectedIndex = selectedIndex,
@@ -322,6 +349,7 @@ private fun AppScaffold(settings: AppSettings, settingsVm: SettingsViewModel, sy
                     .align(Alignment.BottomCenter)
                     .onSizeChanged { barHeightPx = it.height },
             )
+            }
         }
     }
 }

@@ -164,11 +164,37 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     // ---- selection ----------------------------------------------------------------------------
 
+    /** The item the next range selection starts from: the last one the user selected on purpose. */
+    private var selectionAnchor: String? = null
+
     fun toggleSelect(path: String) {
-        _ui.update { s -> s.copy(selection = if (path in s.selection) s.selection - path else s.selection + path) }
+        _ui.update { s ->
+            val adding = path !in s.selection
+            selectionAnchor = if (adding) path else selectionAnchor
+            s.copy(selection = if (adding) s.selection + path else s.selection - path)
+        }
+    }
+
+    /**
+     * Long-press: with something already selected, selects every item between the last selected one and this one
+     * (in the order shown on screen). With nothing selected it simply starts a selection.
+     */
+    fun rangeSelectTo(path: String) {
+        val visible = view.value?.visible?.map { it.path } ?: return
+        val anchor = selectionAnchor
+        if (_ui.value.selection.isEmpty() || anchor == null || anchor !in visible) {
+            toggleSelect(path)
+            return
+        }
+        val a = visible.indexOf(anchor)
+        val b = visible.indexOf(path)
+        if (b < 0) return
+        val range = visible.subList(minOf(a, b), maxOf(a, b) + 1)
+        _ui.update { it.copy(selection = it.selection + range) }
     }
 
     fun clearSelection() {
+        selectionAnchor = null
         _ui.update { it.copy(selection = emptySet()) }
     }
 

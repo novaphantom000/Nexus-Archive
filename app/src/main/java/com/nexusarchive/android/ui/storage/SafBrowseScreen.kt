@@ -2,6 +2,8 @@
 
 package com.nexusarchive.android.ui.storage
 
+import com.nexusarchive.android.ui.components.topFade
+import com.nexusarchive.android.ui.components.NexusSnackbarHost
 import com.nexusarchive.android.ui.components.LocalFloatingBarInset
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -126,6 +128,7 @@ fun SafBrowseScreen(
         copyTarget = null
     }
 
+    val safListState = androidx.compose.foundation.lazy.rememberLazyListState()
     val selected = ui.items.filter { it.documentId in ui.selection }
     val single = if (selected.size == 1) selected[0] else null
     val title = ui.crumbs.lastOrNull()?.name ?: "External storage"
@@ -185,7 +188,7 @@ fun SafBrowseScreen(
                 )
             }
         },
-        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = LocalFloatingBarInset.current)) },
+        snackbarHost = { NexusSnackbarHost(snackbar) },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             val failure = ui.failure
@@ -213,7 +216,11 @@ fun SafBrowseScreen(
                             message = if (ui.canCreateHere) "Use the buttons above to add a folder or copy files here." else "This location is read-only.",
                         )
                     } else {
-                        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp + LocalFloatingBarInset.current)) {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize().topFade(safListState.canScrollBackward),
+                            state = safListState,
+                            contentPadding = PaddingValues(bottom = 24.dp + LocalFloatingBarInset.current),
+                        ) {
                             items(ui.items, key = { it.documentId }) { item ->
                                 val isSelected = item.documentId in ui.selection
                                 ListItem(

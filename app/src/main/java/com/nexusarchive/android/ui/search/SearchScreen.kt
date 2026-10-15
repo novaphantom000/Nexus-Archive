@@ -2,6 +2,7 @@
 
 package com.nexusarchive.android.ui.search
 
+import com.nexusarchive.android.ui.components.topFade
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -111,6 +112,7 @@ fun SearchScreen(
     BackHandler { onBack() }
 
     val currentScope = scopes.firstOrNull { it.path == ui.scopePath }
+    val resultsState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     Scaffold { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -210,7 +212,11 @@ fun SearchScreen(
                     title = "Nothing found",
                     message = "No matching items in ${currentScope?.label ?: "this location"}. Try another name, type or location.",
                 )
-                else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxSize().topFade(resultsState.canScrollBackward),
+                    state = resultsState,
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                ) {
                     if (ui.results.isNotEmpty()) {
                         item(key = "count") {
                             Text(

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.os.Build
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -14,7 +15,9 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -22,85 +25,101 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import com.nexusarchive.android.data.ThemeMode
+import com.nexusarchive.android.data.ThemeStyle
 
-// Original "Nexus" palette: indigo primary, teal tertiary. Hand-tuned tonal roles for light and dark.
-private val NexusLight = lightColorScheme(
-    primary = Color(0xFF4355B9),
+// Default palette: #777C6D, #B7B89F, #CBCBCB and #EEEEEE. The light scheme uses #EEEEEE as the background with
+// a slightly deepened #777C6D as the accent (so white text on it stays readable); the dark scheme turns the
+// same colours into a dark olive-grey surface with #B7B89F and #CBCBCB as the accents.
+private val DefaultLight = lightColorScheme(
+    primary = Color(0xFF5F6455),
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFDEE0FF),
-    onPrimaryContainer = Color(0xFF00105C),
-    inversePrimary = Color(0xFFBAC3FF),
-    secondary = Color(0xFF5A5D72),
+    primaryContainer = Color(0xFFB7B89F),
+    onPrimaryContainer = Color(0xFF1C1E17),
+    inversePrimary = Color(0xFFB7B89F),
+    secondary = Color(0xFF6A6F60),
     onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFDFE1F9),
-    onSecondaryContainer = Color(0xFF171B2C),
-    tertiary = Color(0xFF00696B),
+    secondaryContainer = Color(0xFFCBCBCB),
+    onSecondaryContainer = Color(0xFF25271F),
+    tertiary = Color(0xFF6B7260),
     onTertiary = Color(0xFFFFFFFF),
-    tertiaryContainer = Color(0xFF9CF1F2),
-    onTertiaryContainer = Color(0xFF002020),
+    tertiaryContainer = Color(0xFFD9DACB),
+    onTertiaryContainer = Color(0xFF1F2218),
     error = Color(0xFFBA1A1A),
     onError = Color(0xFFFFFFFF),
     errorContainer = Color(0xFFFFDAD6),
     onErrorContainer = Color(0xFF410002),
-    background = Color(0xFFFBF8FD),
-    onBackground = Color(0xFF1B1B1F),
-    surface = Color(0xFFFBF8FD),
-    onSurface = Color(0xFF1B1B1F),
-    surfaceVariant = Color(0xFFE3E1EC),
-    onSurfaceVariant = Color(0xFF46464F),
-    surfaceTint = Color(0xFF4355B9),
-    inverseSurface = Color(0xFF303034),
-    inverseOnSurface = Color(0xFFF2F0F4),
-    outline = Color(0xFF767680),
-    outlineVariant = Color(0xFFC6C5D0),
+    background = Color(0xFFEEEEEE),
+    onBackground = Color(0xFF1D1E1A),
+    surface = Color(0xFFEEEEEE),
+    onSurface = Color(0xFF1D1E1A),
+    surfaceVariant = Color(0xFFDDDDD2),
+    onSurfaceVariant = Color(0xFF46483E),
+    surfaceTint = Color(0xFF5F6455),
+    inverseSurface = Color(0xFF31332C),
+    inverseOnSurface = Color(0xFFEEEEEE),
+    outline = Color(0xFF777C6D),
+    outlineVariant = Color(0xFFB7B89F),
     scrim = Color(0xFF000000),
-    surfaceBright = Color(0xFFFBF8FD),
-    surfaceDim = Color(0xFFDBD9DE),
-    surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF5F2F8),
-    surfaceContainer = Color(0xFFEFEDF2),
-    surfaceContainerHigh = Color(0xFFE9E7EC),
-    surfaceContainerHighest = Color(0xFFE3E1E6),
+    surfaceBright = Color(0xFFF7F7F5),
+    surfaceDim = Color(0xFFD6D6D4),
+    surfaceContainerLowest = Color(0xFFF8F8F8),
+    surfaceContainerLow = Color(0xFFF2F2F1),
+    surfaceContainer = Color(0xFFE9E9E7),
+    surfaceContainerHigh = Color(0xFFE2E2DF),
+    surfaceContainerHighest = Color(0xFFDBDBD8),
 )
 
-private val NexusDark = darkColorScheme(
-    primary = Color(0xFFBAC3FF),
-    onPrimary = Color(0xFF08218A),
-    primaryContainer = Color(0xFF293CA0),
-    onPrimaryContainer = Color(0xFFDEE0FF),
-    inversePrimary = Color(0xFF4355B9),
-    secondary = Color(0xFFC2C5DD),
-    onSecondary = Color(0xFF2C2F42),
-    secondaryContainer = Color(0xFF424659),
-    onSecondaryContainer = Color(0xFFDFE1F9),
-    tertiary = Color(0xFF80D4D5),
-    onTertiary = Color(0xFF003738),
-    tertiaryContainer = Color(0xFF004F51),
-    onTertiaryContainer = Color(0xFF9CF1F2),
+private val DefaultDark = darkColorScheme(
+    primary = Color(0xFFB7B89F),
+    onPrimary = Color(0xFF2A2C1F),
+    primaryContainer = Color(0xFF4A4E40),
+    onPrimaryContainer = Color(0xFFE4E5D8),
+    inversePrimary = Color(0xFF5F6455),
+    secondary = Color(0xFFCBCBCB),
+    onSecondary = Color(0xFF2F302A),
+    secondaryContainer = Color(0xFF45473E),
+    onSecondaryContainer = Color(0xFFE2E2D6),
+    tertiary = Color(0xFF9FA690),
+    onTertiary = Color(0xFF22251B),
+    tertiaryContainer = Color(0xFF3E4236),
+    onTertiaryContainer = Color(0xFFDCDDC9),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
     errorContainer = Color(0xFF93000A),
     onErrorContainer = Color(0xFFFFDAD6),
-    background = Color(0xFF131316),
-    onBackground = Color(0xFFE4E1E6),
-    surface = Color(0xFF131316),
-    onSurface = Color(0xFFE4E1E6),
-    surfaceVariant = Color(0xFF46464F),
-    onSurfaceVariant = Color(0xFFC6C5D0),
-    surfaceTint = Color(0xFFBAC3FF),
-    inverseSurface = Color(0xFFE4E1E6),
-    inverseOnSurface = Color(0xFF303034),
-    outline = Color(0xFF90909A),
-    outlineVariant = Color(0xFF46464F),
+    background = Color(0xFF121310),
+    onBackground = Color(0xFFE4E5DE),
+    surface = Color(0xFF121310),
+    onSurface = Color(0xFFE4E5DE),
+    surfaceVariant = Color(0xFF44463E),
+    onSurfaceVariant = Color(0xFFC9CAB9),
+    surfaceTint = Color(0xFFB7B89F),
+    inverseSurface = Color(0xFFE4E5DE),
+    inverseOnSurface = Color(0xFF31332C),
+    outline = Color(0xFF8F9183),
+    outlineVariant = Color(0xFF44463E),
     scrim = Color(0xFF000000),
-    surfaceBright = Color(0xFF39393D),
-    surfaceDim = Color(0xFF131316),
-    surfaceContainerLowest = Color(0xFF0E0E11),
-    surfaceContainerLow = Color(0xFF1B1B1F),
-    surfaceContainer = Color(0xFF1F1F23),
-    surfaceContainerHigh = Color(0xFF2A2A2D),
-    surfaceContainerHighest = Color(0xFF353438),
+    surfaceBright = Color(0xFF383A33),
+    surfaceDim = Color(0xFF121310),
+    surfaceContainerLowest = Color(0xFF0D0E0B),
+    surfaceContainerLow = Color(0xFF1A1B16),
+    surfaceContainer = Color(0xFF1E201A),
+    surfaceContainerHigh = Color(0xFF292B24),
+    surfaceContainerHighest = Color(0xFF34362F),
 )
+
+/** True when the liquid-glass overlay is on. Floating components read it to turn translucent. */
+val LocalLiquidGlass = compositionLocalOf { false }
+
+/** Container colour for floating surfaces: solid normally, translucent (so content shows through) with glass on. */
+@Composable
+fun floatingContainerColor(base: Color = MaterialTheme.colorScheme.surfaceContainerHigh): Color =
+    if (LocalLiquidGlass.current) base.copy(alpha = 0.6f) else base
+
+/** Hairline highlight used only by the glass look; floating surfaces have no outline otherwise. */
+@Composable
+fun floatingBorder(): BorderStroke? =
+    if (LocalLiquidGlass.current) BorderStroke(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f)) else null
 
 // Larger corner radii than stock M3: the "expressive" rounded look.
 val NexusShapes = Shapes(
@@ -124,20 +143,28 @@ val NexusTypography = Typography(
 @Composable
 fun NexusTheme(
     themeMode: ThemeMode,
-    dynamicColor: Boolean,
+    themeStyle: ThemeStyle,
+    presetId: String,
+    liquidGlass: Boolean,
     content: @Composable () -> Unit,
 ) {
-    val dark = when (themeMode) {
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    val systemDark = isSystemInDarkTheme()
+    val wantDark = when (themeMode) {
+        ThemeMode.SYSTEM -> systemDark
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
     val context = LocalContext.current
+    val preset = ThemePresets.byId(presetId)
+    // A preset that only exists in dark (for example Dracula) stays dark even when the app is set to light.
+    val dark = if (themeStyle == ThemeStyle.PRESET && preset.light == null) true else wantDark
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+        themeStyle == ThemeStyle.MONET && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
             if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        dark -> NexusDark
-        else -> NexusLight
+        themeStyle == ThemeStyle.PRESET ->
+            if (dark) presetColorScheme(preset.dark, true) else presetColorScheme(preset.light ?: preset.dark, false)
+        dark -> DefaultDark
+        else -> DefaultLight
     }
 
     // Keep status/navigation bar icon contrast in sync with the in-app theme (not just the system theme).
@@ -153,12 +180,14 @@ fun NexusTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = NexusTypography,
-        shapes = NexusShapes,
-        content = content,
-    )
+    CompositionLocalProvider(LocalLiquidGlass provides liquidGlass) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = NexusTypography,
+            shapes = NexusShapes,
+            content = content,
+        )
+    }
 }
 
 private fun Context.findActivity(): Activity? {

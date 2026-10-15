@@ -2,6 +2,7 @@
 
 package com.nexusarchive.android.ui.storage
 
+import com.nexusarchive.android.ui.components.NexusSnackbarHost
 import com.nexusarchive.android.ui.components.LocalFloatingBarInset
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -137,7 +138,7 @@ fun StorageScreen(
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = LocalFloatingBarInset.current)) },
+        snackbarHost = { NexusSnackbarHost(snackbar) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 modifier = Modifier.padding(bottom = LocalFloatingBarInset.current),

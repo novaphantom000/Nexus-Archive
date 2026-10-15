@@ -2,10 +2,16 @@
 
 package com.nexusarchive.android.ui.browse
 
+import com.nexusarchive.android.ui.components.topFade
+import com.nexusarchive.android.ui.components.NexusSnackbarHost
 import com.nexusarchive.android.ui.archive.ExtractDialog
 import kotlinx.coroutines.launch
 import com.nexusarchive.android.ui.components.buildLocationOptions
 import com.nexusarchive.android.ui.components.LocationPickerTitle
+import com.nexusarchive.android.ui.components.LocalBarsCollapsed
+import com.nexusarchive.android.ui.components.PathEditorRow
+import com.nexusarchive.android.ui.theme.floatingBorder
+import com.nexusarchive.android.ui.theme.floatingContainerColor
 import com.nexusarchive.android.ui.components.LocationOption
 import com.nexusarchive.android.ui.components.LocalFloatingBarInset
 import androidx.compose.ui.draw.clip
@@ -23,6 +29,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -203,6 +211,9 @@ private fun BrowseContent(
     val snackbar = remember { SnackbarHostState() }
 
     var showSortSheet by remember { mutableStateOf(false) }
+    var pathMenuOpen by remember { mutableStateOf(false) }
+    var editingPath by remember { mutableStateOf(false) }
+    var liveScale by remember(settings.itemScale) { mutableStateOf(settings.itemScale) }
     var showNewSheet by remember { mutableStateOf(false) }
     var createKind by remember { mutableStateOf<CreateKind?>(null) }
     var renameTarget by remember { mutableStateOf<FileEntry?>(null) }
@@ -307,15 +318,11 @@ private fun BrowseContent(
                         title = buildBreadcrumbs(ui.currentPath, ui.volumes).lastOrNull()?.label ?: "Browse",
                         subtitle = if (view == null) "" else Formatters.plural(visible.size, "item"),
                         canGoUp = canGoUp,
-                        viewMode = settings.viewMode,
                         showHidden = settings.showHidden,
                         isBookmarked = ui.currentPath in settings.bookmarks,
                         onUp = { vm.navigateUp() },
                         onSearch = { vm.setSearchActive(true) },
                         onSortFilter = { showSortSheet = true },
-                        onToggleView = {
-                            settingsVm.setViewMode(if (settings.viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST)
-                        },
                         onRefresh = vm::refresh,
                         onToggleHidden = { settingsVm.setShowHidden(!settings.showHidden) },
                         onToggleBookmark = vm::toggleBookmarkForCurrent,
@@ -351,9 +358,9 @@ private fun BrowseContent(
         floatingActionButton = {
             AnimatedVisibility(
                 modifier = Modifier.padding(bottom = LocalFloatingBarInset.current),
-                visible = mode == TopBarMode.NORMAL && ui.canWriteHere && ui.clipboard == null,
-                enter = fadeIn(Motion.effects(reduce)),
-                exit = fadeOut(Motion.effects(reduce)),
+                visible = mode == TopBarMode.NORMAL && ui.canWriteHere && ui.clipboard == null && !LocalBarsCollapsed.current,
+                enter = fadeIn(Motion.effects(reduce)) + scaleIn(Motion.spatial(reduce), initialScale = 0.6f),
+                exit = fadeOut(Motion.effects(reduce)) + scaleOut(Motion.spatial(reduce), targetScale = 0.6f),
             ) {
                 ExtendedFloatingActionButton(
                     onClick = { showNewSheet = true },
@@ -364,7 +371,7 @@ private fun BrowseContent(
                 )
             }
         },
-        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = LocalFloatingBarInset.current)) },
+        snackbarHost = { NexusSnackbarHost(snackbar) },
     ) { padding ->
         Column(
             Modifier
@@ -372,11 +379,48 @@ private fun BrowseContent(
                 .padding(padding),
         ) {
             if (ui.currentPath.isNotBlank()) {
-                BreadcrumbBar(
-                    crumbs = remember(ui.currentPath, ui.volumes) { buildBreadcrumbs(ui.currentPath, ui.volumes) },
-                    onNavigate = vm::navigateTo,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                )
+                if (editingPath) {
+                    PathEditorRow(
+                        initial = ui.currentPath,
+                        label = "Go to folder",
+                        onGo = { text ->
+                            if (text.isNotEmpty() && File(text).isDirectory) {
+                                vm.navigateTo(text)
+                                editingPath = false
+                                null
+                            } else {
+                                "That folder doesn't exist."
+                            }
+                        },
+                        onCancel = { editingPath = false },
+                    )
+                } else {
+                    Box {
+                        BreadcrumbBar(
+                            crumbs = remember(ui.currentPath, ui.volumes) { buildBreadcrumbs(ui.currentPath, ui.volumes) },
+                            onNavigate = vm::navigateTo,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            onLongPress = { pathMenuOpen = true },
+                        )
+                        DropdownMenu(expanded = pathMenuOpen, onDismissRequest = { pathMenuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Copy path") },
+                                onClick = {
+                                    pathMenuOpen = false
+                                    FileActions.copyText(context, "Path", ui.currentPath)
+                                    vm.postMessage("Path copied")
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Edit path") },
+                                onClick = {
+                                    pathMenuOpen = false
+                                    editingPath = true
+                                },
+                            )
+                        }
+                    }
+                }
             }
             if (ui.loading) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -451,7 +495,9 @@ private fun BrowseContent(
                                 }
                             }
                         },
-                        onLongClick = { entry -> vm.toggleSelect(entry.path) },
+                        onLongClick = { entry -> vm.rangeSelectTo(entry.path) },
+                        onToggleSelect = { entry -> vm.toggleSelect(entry.path) },
+                        itemScale = liveScale,
                     )
                 }
             }
@@ -469,6 +515,11 @@ private fun BrowseContent(
             onFoldersFirst = settingsVm::setFoldersFirst,
             onShowHidden = settingsVm::setShowHidden,
             onFilter = vm::setFilter,
+            viewMode = settings.viewMode,
+            onViewMode = settingsVm::setViewMode,
+            itemScale = liveScale,
+            onItemScaleChange = { liveScale = it },
+            onItemScaleCommit = settingsVm::setItemScale,
             onDismiss = { showSortSheet = false },
         )
     }
@@ -648,13 +699,11 @@ private fun NormalTopBar(
     title: String,
     subtitle: String,
     canGoUp: Boolean,
-    viewMode: ViewMode,
     showHidden: Boolean,
     isBookmarked: Boolean,
     onUp: () -> Unit,
     onSearch: () -> Unit,
     onSortFilter: () -> Unit,
-    onToggleView: () -> Unit,
     onRefresh: () -> Unit,
     onToggleHidden: () -> Unit,
     onToggleBookmark: () -> Unit,
@@ -669,12 +718,6 @@ private fun NormalTopBar(
         actions = {
             IconButton(onClick = onSearch) { Icon(Icons.Rounded.Search, contentDescription = "Search in this folder") }
             IconButton(onClick = onSortFilter) { Icon(Icons.Rounded.FilterList, contentDescription = "Sort and filter") }
-            IconButton(onClick = onToggleView) {
-                Icon(
-                    imageVector = if (viewMode == ViewMode.LIST) Icons.Rounded.GridView else Icons.AutoMirrored.Rounded.ViewList,
-                    contentDescription = if (viewMode == ViewMode.LIST) "Switch to grid view" else "Switch to list view",
-                )
-            }
             Box {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = "More options") }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -854,11 +897,13 @@ private fun FileCollection(
     gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
     onClick: (FileEntry) -> Unit,
     onLongClick: (FileEntry) -> Unit,
+    onToggleSelect: (FileEntry) -> Unit,
+    itemScale: Float,
 ) {
     if (viewMode == ViewMode.LIST) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().topFade(listState.canScrollBackward),
             contentPadding = PaddingValues(bottom = 112.dp + LocalFloatingBarInset.current),
         ) {
             items(entries, key = { it.path }) { entry ->
@@ -868,6 +913,8 @@ private fun FileCollection(
                     density = density,
                     onClick = { onClick(entry) },
                     onLongClick = { onLongClick(entry) },
+                    onToggleSelect = { onToggleSelect(entry) },
+                    itemScale = itemScale,
                     modifier = if (reduce) {
                         Modifier.animateItem(fadeInSpec = null, placementSpec = null, fadeOutSpec = null)
                     } else {
@@ -878,9 +925,9 @@ private fun FileCollection(
         }
     } else {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 120.dp),
+            columns = GridCells.Adaptive(minSize = (88f + 100f * itemScale).dp),
             state = gridState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().topFade(gridState.canScrollBackward),
             contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 112.dp + LocalFloatingBarInset.current),
         ) {
             items(entries, key = { it.path }) { entry ->
@@ -889,6 +936,8 @@ private fun FileCollection(
                     isSelected = entry.path in selection,
                     onClick = { onClick(entry) },
                     onLongClick = { onLongClick(entry) },
+                    onToggleSelect = { onToggleSelect(entry) },
+                    itemScale = itemScale,
                 )
             }
         }
@@ -917,16 +966,21 @@ private fun ClipboardBar(
     onPaste: () -> Unit,
     onClear: () -> Unit,
 ) {
+    // One floating card with the same corner radius on every corner. The Paste button inside uses the matching
+    // inner radius (outer radius minus the 10dp padding) so the two shapes sit concentrically.
     Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        tonalElevation = 3.dp,
+        color = floatingContainerColor(),
+        border = floatingBorder(),
+        shape = RoundedCornerShape(32.dp),
+        shadowElevation = 6.dp,
+        modifier = Modifier
+            .navigationBarsPadding()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -944,7 +998,7 @@ private fun ClipboardBar(
                 }
             }
             TextButton(onClick = onClear) { Text("Clear") }
-            Button(onClick = onPaste, enabled = canPaste) {
+            Button(onClick = onPaste, enabled = canPaste, shape = RoundedCornerShape(22.dp)) {
                 Icon(Icons.Rounded.ContentPaste, contentDescription = null)
                 Spacer(Modifier.padding(horizontal = 4.dp))
                 Text("Paste here")

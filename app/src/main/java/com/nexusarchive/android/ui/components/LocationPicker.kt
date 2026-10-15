@@ -5,9 +5,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDropDown
+import androidx.compose.material.icons.rounded.CameraAlt
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.SdCard
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.DropdownMenu
@@ -40,7 +47,7 @@ class LocationOption(
     val safId: String?,
 )
 
-/** Storage volumes, Quick access folders, then added external storage (only when some exist). */
+/** Storage volumes, the standard folders (Downloads, Documents, Music, Movies, Camera, Pictures), Quick access folders, then added external storage (only when some exist). */
 fun buildLocationOptions(
     volumes: List<StorageVolumeInfo>,
     quickAccess: List<String>,
@@ -49,6 +56,21 @@ fun buildLocationOptions(
     val list = ArrayList<LocationOption>()
     for (volume in volumes) {
         list.add(LocationOption("Storage", volume.label, if (volume.isRemovable) Icons.Rounded.SdCard else Icons.Rounded.Storage, volume.path, null))
+    }
+    val primary = volumes.firstOrNull { it.isPrimary } ?: volumes.firstOrNull()
+    if (primary != null) {
+        val standard = listOf(
+            Triple("Downloads", "Download", Icons.Rounded.Download),
+            Triple("Documents", "Documents", Icons.Rounded.Description),
+            Triple("Music", "Music", Icons.Rounded.MusicNote),
+            Triple("Movies", "Movies", Icons.Rounded.Movie),
+            Triple("Camera", "DCIM/Camera", Icons.Rounded.CameraAlt),
+            Triple("Pictures", "Pictures", Icons.Rounded.Image),
+        )
+        for ((label, relative, icon) in standard) {
+            val dir = File(primary.path, relative)
+            if (dir.isDirectory) list.add(LocationOption("Folders", label, icon, dir.path, null))
+        }
     }
     for (path in quickAccess) {
         list.add(LocationOption("Quick access", File(path).name.ifEmpty { path }, Icons.Rounded.Folder, path, null))
@@ -71,10 +93,9 @@ fun LocationPickerTitle(
     Box {
         Row(
             modifier = Modifier
-                .clip(MaterialTheme.shapes.large)
+                .clip(RoundedCornerShape(16.dp))
                 .clickable(onClickLabel = "Choose location") { open = true }
-                .padding(vertical = 2.dp)
-                .padding(start = 4.dp, end = 2.dp),
+                .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f, fill = false)) {

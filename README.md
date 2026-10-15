@@ -4,11 +4,10 @@ An Android file manager (Kotlin, Jetpack Compose, Material 3) that is growing in
 
 > **Verification status (read this first)**
 >
-> - **0.1.0 to 0.3.1** were built by the GitHub Action; the project owner installed 0.3.x and sent a screenshot of it
->   running. That is the owner's report; it says nothing about every feature.
-> - **0.4.0** (this version) reworks the archive browser, the navigation bar overlay and the archive menu in the
->   file browser. **None of it has been compiled, run or tested.** It was written in an environment with no Android
->   SDK, Gradle or network.
+> - **0.1.0 to 0.4.0** were built by the GitHub Action and installed by the project owner (screenshots of 0.3.x and
+>   0.4.0 running were shared). That says nothing about every feature.
+> - **0.5.0** (this version) is a large theme and interaction update. **None of it has been compiled, run or tested.**
+>   It was written in an environment with no Android SDK, Gradle or network.
 > - Treat everything marked "source only" as unproven until a green run and a device test say otherwise.
 >   If a run is red, copy the **first** error line from the failing step.
 
@@ -66,6 +65,32 @@ writes; symlinks never followed; operations screen with real counters and cancel
 
 Limits: Android 15 caps how long a data-sync foreground service may run; the service stops cleanly when told to, which would
 end its protection for very long jobs. Operations still do not survive the process being killed.
+
+### New in 0.5.0 (source only, never compiled)
+
+| Area | What changed | Where |
+|---|---|---|
+| Theme engine | Settings > Appearance: **Default** (the #777C6D / #B7B89F / #CBCBCB / #EEEEEE palette, with a deepened accent in light mode so text stays readable), **Monet** (Android 12+ system colours, follows light/dark), **Presets**. Every colour role is mapped, nothing is hard-coded in components | `ui/theme/Theme.kt` |
+| Presets | Catppuccin, Dracula, Everforest, Gruvbox, Nord, OneDark, Poimandres, Rosé Pine, TokyoNight with name and swatches; applied instantly and saved. Dracula and Poimandres are dark only, so they stay dark even when the app is set to light. Palettes were written from memory; small colour differences from the originals are possible | `ThemePresets.kt`, `PresetPicker.kt` |
+| Liquid glass | Global switch. Floating pill, search button, selection bar, paste bar and snackbars become translucent and follow the active palette. **This is translucency only, not a real backdrop blur** (that needs an extra library, not added yet). The "frosted glass on other elements" sub-toggle is not built | `floatingContainerColor` |
+| Nav pill | No outline (a faint hairline only with glass on). Moving down a list shrinks the pill (label hides) and tucks the floating buttons away with a scale animation; moving back up restores them | `NexusBars.kt`, `NexusAppRoot` |
+| Snackbars | Themed (not the white default), rounded, and placed above the pill | `NexusSnackbarHost` |
+| Path bar | Rows now fade out softly under the path bar instead of being cut off; long-press the path for **Copy path** or **Edit path** (type a folder and press Go). The same works inside archives | `Fades.kt`, `PathEditorRow` |
+| Sort sheet | List/Grid switch and an item-size slider moved here (the top-bar grid button is gone); the slider scales list icons and grid tiles and is saved | `SortFilterSheet` |
+| Selection | Long-press selects every item between the last selected one and the one you pressed; tapping an icon still toggles a single item | `BrowserViewModel.rangeSelectTo` |
+| Location dropdown | Now also lists Downloads, Documents, Music, Movies, Camera and Pictures (only those that exist) | `buildLocationOptions` |
+| Recents | Settings > Privacy: new switch to keep dot-folders and `.nomedia` folders out of Recents (on by default); applied when recording and when showing | `RecentsFilter` |
+| Fixes | Browse title no longer clipped by its rounded highlight; paste bar is one floating card with matching corner radii | `LocationPicker.kt`, `ClipboardBar` |
+
+### Not built yet (planned in this order)
+
+1. **Tabs** (at least two always open, add/close/reorder, grid or list tab view, swipe between tabs with a bounce at the ends, saved or fixed start tabs set in Settings, clipboard shared across tabs). Everything below depends on this.
+2. Extract through the clipboard (Clear / Extract bar) and the merge / skip / keep-both prompts with Remember.
+3. Landscape split view with two tabs, scrollbar, camera-cutout safe area.
+4. Splash screen and the first-launch setup and intro.
+5. Row details: time next to the date, item count on folders, special icons for Android, DCIM, Documents, Download, Music, Movies, Pictures, Ringtones, Alarms and Games.
+6. Drag-to-select on the icon, pull-down storage card, compression ratio card.
+7. Built-in text editor, image viewer, document reader, video player (Media3 ExoPlayer; mpvEx's libmpv is not being embedded because its native build can't be verified here) and music player, plus the "open with" chooser and a restructured Settings.
 
 ### New in 0.4.0 (source only, never compiled)
 

@@ -2,6 +2,9 @@
 
 package com.nexusarchive.android.ui.browse
 
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.automirrored.rounded.ViewList
+import androidx.compose.material3.Slider
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -73,6 +76,8 @@ fun FileListItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onToggleSelect: () -> Unit = onLongClick,
+    itemScale: Float = 0.5f,
 ) {
     val reduce = LocalReduceMotion.current
     val colors = MaterialTheme.colorScheme
@@ -86,11 +91,7 @@ fun FileListItem(
         LayoutDensity.COMFORTABLE -> 8.dp
         LayoutDensity.SPACIOUS -> 14.dp
     }
-    val iconSize = when (density) {
-        LayoutDensity.COMPACT -> 36.dp
-        LayoutDensity.COMFORTABLE -> 44.dp
-        LayoutDensity.SPACIOUS -> 52.dp
-    }
+    val iconSize = (32f + 40f * itemScale).dp
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -109,7 +110,7 @@ fun FileListItem(
             size = iconSize,
             path = entry.path,
             lastModified = entry.lastModified,
-            onToggle = onLongClick,
+            onToggle = onToggleSelect,
         )
         Column(Modifier.weight(1f)) {
             Text(
@@ -136,6 +137,8 @@ fun FileGridItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onToggleSelect: () -> Unit = onLongClick,
+    itemScale: Float = 0.5f,
 ) {
     val reduce = LocalReduceMotion.current
     val colors = MaterialTheme.colorScheme
@@ -157,10 +160,10 @@ fun FileGridItem(
         SelectableLeading(
             kind = entry.kind,
             selected = isSelected,
-            size = 56.dp,
+            size = (40f + 48f * itemScale).dp,
             path = entry.path,
             lastModified = entry.lastModified,
-            onToggle = onLongClick,
+            onToggle = onToggleSelect,
         )
         Spacer(Modifier.height(10.dp))
         Text(
@@ -185,6 +188,7 @@ fun BreadcrumbBar(
     crumbs: List<Breadcrumb>,
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onLongPress: () -> Unit = {},
 ) {
     val reduce = LocalReduceMotion.current
     val listState = rememberLazyListState()
@@ -209,11 +213,16 @@ fun BreadcrumbBar(
                     )
                 }
                 Surface(
-                    onClick = { onNavigate(crumb.path) },
-                    enabled = !isLast,
                     shape = CircleShape,
                     color = if (isLast) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
                     contentColor = if (isLast) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .combinedClickable(
+                            onClick = { if (!isLast) onNavigate(crumb.path) },
+                            onLongClick = onLongPress,
+                            onLongClickLabel = "Path options",
+                        ),
                 ) {
                     Text(
                         text = crumb.label,
@@ -254,6 +263,11 @@ fun SortFilterSheet(
     onFoldersFirst: (Boolean) -> Unit,
     onShowHidden: (Boolean) -> Unit,
     onFilter: (FilterKind) -> Unit,
+    viewMode: ViewMode,
+    onViewMode: (ViewMode) -> Unit,
+    itemScale: Float,
+    onItemScaleChange: (Float) -> Unit,
+    onItemScaleCommit: (Float) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -264,6 +278,35 @@ fun SortFilterSheet(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp),
         ) {
+            Text("View", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = viewMode == ViewMode.LIST,
+                    onClick = { onViewMode(ViewMode.LIST) },
+                    label = { Text("List") },
+                    leadingIcon = { Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = null) },
+                )
+                FilterChip(
+                    selected = viewMode == ViewMode.GRID,
+                    onClick = { onViewMode(ViewMode.GRID) },
+                    label = { Text("Grid") },
+                    leadingIcon = { Icon(Icons.Rounded.GridView, contentDescription = null) },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                if (viewMode == ViewMode.LIST) "Icon and row size" else "Tile size",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Slider(
+                value = itemScale,
+                onValueChange = onItemScaleChange,
+                onValueChangeFinished = { onItemScaleCommit(itemScale) },
+                valueRange = 0f..1f,
+            )
+            Spacer(Modifier.height(12.dp))
             Text("Sort by", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

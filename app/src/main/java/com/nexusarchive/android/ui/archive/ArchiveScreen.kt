@@ -2,8 +2,13 @@
 
 package com.nexusarchive.android.ui.archive
 
+import com.nexusarchive.android.ui.components.topFade
+import com.nexusarchive.android.ui.components.NexusSnackbarHost
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
@@ -30,6 +35,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -102,6 +109,9 @@ import com.nexusarchive.android.ui.browse.Breadcrumb
 import com.nexusarchive.android.ui.browse.BreadcrumbBar
 import com.nexusarchive.android.ui.browse.FileActions
 import com.nexusarchive.android.ui.components.EmptyState
+import com.nexusarchive.android.archive.ArchivePaths
+import com.nexusarchive.android.ui.components.LocalBarsCollapsed
+import com.nexusarchive.android.ui.components.PathEditorRow
 import com.nexusarchive.android.ui.components.LocalFloatingBarInset
 import com.nexusarchive.android.ui.components.LocationOption
 import com.nexusarchive.android.ui.components.LocationPickerTitle
@@ -136,6 +146,8 @@ fun ArchiveScreen(
     var sortOpen by remember { mutableStateOf(false) }
     var selectionMenuOpen by remember { mutableStateOf(false) }
     var filePrompt by remember { mutableStateOf<TreeNode?>(null) }
+    var pathMenuOpen by remember { mutableStateOf(false) }
+    var editingPath by remember { mutableStateOf(false) }
     var propertiesFor by remember { mutableStateOf<TreeNode?>(null) }
     val archiveFile = remember(path) { File(path) }
     val reduce = LocalReduceMotion.current
@@ -347,11 +359,16 @@ fun ArchiveScreen(
                 )
             }
         },
-        snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = LocalFloatingBarInset.current)) },
+        snackbarHost = { NexusSnackbarHost(snackbar) },
         floatingActionButton = {
-            if (listing != null && !selectionActive && ArchiveFormats.capabilities(listing.format).extract) {
+            AnimatedVisibility(
+                visible = listing != null && !selectionActive && !LocalBarsCollapsed.current &&
+                    ArchiveFormats.capabilities(listing.format).extract,
+                modifier = Modifier.padding(bottom = LocalFloatingBarInset.current),
+                enter = fadeIn(Motion.effects(reduce)) + scaleIn(Motion.spatial(reduce), initialScale = 0.6f),
+                exit = fadeOut(Motion.effects(reduce)) + scaleOut(Motion.spatial(reduce), targetScale = 0.6f),
+            ) {
                 ExtendedFloatingActionButton(
-                    modifier = Modifier.padding(bottom = LocalFloatingBarInset.current),
                     onClick = { showExtract = true },
                     icon = { Icon(Icons.Rounded.Unarchive, contentDescription = null) },
                     text = { Text("Extract") },
@@ -366,11 +383,53 @@ fun ArchiveScreen(
                 .padding(padding),
         ) {
             if (listing != null) {
-                BreadcrumbBar(
-                    crumbs = crumbs,
-                    onNavigate = vm::openFolder,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                )
+                if (editingPath) {
+                    PathEditorRow(
+                        initial = ui.currentDir,
+                        label = "Go to folder inside the archive",
+                        onGo = { text ->
+                            val normalized = ArchivePaths.normalize(text)
+                            when {
+                                normalized == null -> "That isn't a valid folder path."
+                                normalized.isEmpty() || listing.entries.any { it.path == normalized && it.isDirectory } ||
+                                    listing.entries.any { it.path.startsWith("$normalized/") } -> {
+                                    vm.openFolder(normalized)
+                                    editingPath = false
+                                    null
+                                }
+                                else -> "That folder isn't in this archive."
+                            }
+                        },
+                        onCancel = { editingPath = false },
+                    )
+                } else {
+                    Box {
+                        BreadcrumbBar(
+                            crumbs = crumbs,
+                            onNavigate = vm::openFolder,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            onLongPress = { pathMenuOpen = true },
+                        )
+                        DropdownMenu(expanded = pathMenuOpen, onDismissRequest = { pathMenuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Copy path") },
+                                onClick = {
+                                    pathMenuOpen = false
+                                    val inside = if (ui.currentDir.isEmpty()) "" else "/" + ui.currentDir
+                                    FileActions.copyText(context, "Path", archiveFile.path + inside)
+                                    vm.postMessage("Path copied")
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Edit path") },
+                                onClick = {
+                                    pathMenuOpen = false
+                                    editingPath = true
+                                },
+                            )
+                        }
+                    }
+                }
             }
             if (ui.searchActive) {
                 OutlinedTextField(
@@ -554,10 +613,13 @@ private fun ArchiveRows(
     reduce: Boolean,
 ) {
     val bottom = 96.dp + LocalFloatingBarInset.current
+    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
     if (grid) {
         LazyVerticalGrid(
             columns = GridCells.Adaptive(112.dp),
-            modifier = Modifier.fillMaxSize(),
+            state = gridState,
+            modifier = Modifier.fillMaxSize().topFade(gridState.canScrollBackward),
             contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 4.dp, bottom = bottom),
         ) {
             items(rows, key = { it.path }) { node ->
@@ -571,7 +633,11 @@ private fun ArchiveRows(
             }
         }
     } else {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottom)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().topFade(listState.canScrollBackward),
+            state = listState,
+            contentPadding = PaddingValues(bottom = bottom),
+        ) {
             if (header != null) item(key = "header") { header() }
             if (rows.isEmpty()) {
                 item(key = "empty") {

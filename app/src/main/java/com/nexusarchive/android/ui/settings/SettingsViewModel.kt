@@ -9,6 +9,7 @@ import com.nexusarchive.android.data.AppSettings
 import com.nexusarchive.android.data.ConflictPolicy
 import com.nexusarchive.android.data.LayoutDensity
 import com.nexusarchive.android.data.ThemeMode
+import com.nexusarchive.android.data.ThemeStyle
 import com.nexusarchive.android.data.ViewMode
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +38,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setReduceMotion(v: Boolean) = fire { repo.setReduceMotion(v) }
     fun setNotifications(v: Boolean) = fire { repo.setNotifications(v) }
     fun setShowRecents(v: Boolean) = fire { repo.setShowRecents(v) }
+    fun setThemeStyle(v: ThemeStyle) = fire { repo.setThemeStyle(v) }
+    fun setThemePreset(v: String) = fire { repo.setThemePreset(v) }
+    fun setLiquidGlass(v: Boolean) = fire { repo.setLiquidGlass(v) }
+    fun setRecentsRespectHidden(v: Boolean) = fire { repo.setRecentsRespectHidden(v) }
+    fun setItemScale(v: Float) = fire { repo.setItemScale(v) }
     fun removeBookmark(path: String) = fire { repo.removeBookmark(path) }
     fun clearRecents() = fire { repo.clearRecents() }
 

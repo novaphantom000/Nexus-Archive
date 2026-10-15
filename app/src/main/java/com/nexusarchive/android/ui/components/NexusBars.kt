@@ -2,6 +2,11 @@
 
 package com.nexusarchive.android.ui.components
 
+import com.nexusarchive.android.ui.theme.floatingBorder
+import com.nexusarchive.android.ui.theme.floatingContainerColor
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -54,6 +59,9 @@ import com.nexusarchive.android.ui.theme.Motion
 /** Height the floating navigation pill covers at the bottom of the screen. Scrollable content adds it as bottom padding. */
 val LocalFloatingBarInset = compositionLocalOf { 0.dp }
 
+/** True while the user is scrolling further down a list: the pill shrinks and floating buttons tuck away. */
+val LocalBarsCollapsed = compositionLocalOf { false }
+
 data class NavItem(val label: String, val icon: ImageVector, val badge: Int = 0)
 
 /**
@@ -69,18 +77,30 @@ fun FloatingNavBar(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
+    val compact = LocalBarsCollapsed.current
+    val reduceMotion = LocalReduceMotion.current
+    val scale by animateFloatAsState(
+        targetValue = if (compact) 0.84f else 1f,
+        animationSpec = Motion.spatial(reduceMotion),
+        label = "navBarScale",
+    )
     Row(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                transformOrigin = TransformOrigin(0.5f, 1f)
+            },
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(
             shape = CircleShape,
-            color = colors.surfaceContainerHigh,
-            border = BorderStroke(1.dp, colors.outlineVariant),
+            color = floatingContainerColor(),
+            border = floatingBorder(),
             shadowElevation = 4.dp,
         ) {
             Row(
@@ -89,7 +109,7 @@ fun FloatingNavBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 items.forEachIndexed { index, item ->
-                    NavPillItem(item = item, selected = index == selectedIndex, onClick = { onSelect(index) })
+                    NavPillItem(item = item, selected = index == selectedIndex, compact = compact, onClick = { onSelect(index) })
                 }
             }
         }
@@ -97,8 +117,8 @@ fun FloatingNavBar(
         Surface(
             onClick = onSearch,
             shape = CircleShape,
-            color = colors.surfaceContainerHigh,
-            border = BorderStroke(1.dp, colors.outlineVariant),
+            color = floatingContainerColor(),
+            border = floatingBorder(),
             shadowElevation = 4.dp,
             modifier = Modifier.size(60.dp),
         ) {
@@ -110,7 +130,7 @@ fun FloatingNavBar(
 }
 
 @Composable
-private fun NavPillItem(item: NavItem, selected: Boolean, onClick: () -> Unit) {
+private fun NavPillItem(item: NavItem, selected: Boolean, compact: Boolean, onClick: () -> Unit) {
     val reduce = LocalReduceMotion.current
     val colors = MaterialTheme.colorScheme
     val container by animateColorAsState(
@@ -122,7 +142,6 @@ private fun NavPillItem(item: NavItem, selected: Boolean, onClick: () -> Unit) {
         onClick = onClick,
         shape = CircleShape,
         color = container,
-        border = if (selected) BorderStroke(1.dp, colors.outline.copy(alpha = 0.55f)) else null,
         modifier = Modifier
             .height(48.dp)
             .semantics(mergeDescendants = true) { this.selected = selected },
@@ -143,7 +162,7 @@ private fun NavPillItem(item: NavItem, selected: Boolean, onClick: () -> Unit) {
                 )
             }
             AnimatedVisibility(
-                visible = selected,
+                visible = selected && !compact,
                 enter = expandHorizontally(animationSpec = Motion.spatial(reduce)) + fadeIn(animationSpec = Motion.effects(reduce)),
                 exit = shrinkHorizontally(animationSpec = Motion.spatial(reduce)) + fadeOut(animationSpec = Motion.effects(reduce)),
             ) {
@@ -175,9 +194,9 @@ fun SelectionPill(
     val colors = MaterialTheme.colorScheme
     Surface(
         shape = CircleShape,
-        color = colors.surfaceContainerHigh,
+        color = floatingContainerColor(),
         contentColor = colors.onSurface,
-        border = BorderStroke(1.dp, colors.outlineVariant),
+        border = floatingBorder(),
         shadowElevation = 6.dp,
         modifier = modifier
             .statusBarsPadding()

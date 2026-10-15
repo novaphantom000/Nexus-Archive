@@ -1,5 +1,9 @@
 package com.nexusarchive.android.data
 
+import androidx.datastore.preferences.core.floatPreferencesKey
+import com.nexusarchive.android.core.RecentsFilter
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -35,6 +39,11 @@ class SettingsRepository(private val context: Context) {
         val reduceMotion = booleanPreferencesKey("reduce_motion")
         val notifications = booleanPreferencesKey("notifications")
         val showRecents = booleanPreferencesKey("show_recents")
+        val themeStyle = stringPreferencesKey("theme_style")
+        val themePreset = stringPreferencesKey("theme_preset")
+        val liquidGlass = booleanPreferencesKey("liquid_glass")
+        val recentsRespectHidden = booleanPreferencesKey("recents_respect_hidden")
+        val itemScale = floatPreferencesKey("item_scale")
         val bookmarks = stringPreferencesKey("bookmarks_json")
         val recentDirs = stringPreferencesKey("recent_dirs_json")
         val recentFiles = stringPreferencesKey("recent_files_json")
@@ -60,6 +69,11 @@ class SettingsRepository(private val context: Context) {
                 reduceMotion = p[Keys.reduceMotion] ?: d.reduceMotion,
                 notifications = p[Keys.notifications] ?: d.notifications,
                 showRecents = p[Keys.showRecents] ?: d.showRecents,
+                themeStyle = p[Keys.themeStyle].toEnum(d.themeStyle),
+                themePreset = p[Keys.themePreset] ?: d.themePreset,
+                liquidGlass = p[Keys.liquidGlass] ?: d.liquidGlass,
+                recentsRespectHidden = p[Keys.recentsRespectHidden] ?: d.recentsRespectHidden,
+                itemScale = p[Keys.itemScale] ?: d.itemScale,
                 bookmarks = decodeList(p[Keys.bookmarks]),
                 recentDirs = decodeList(p[Keys.recentDirs]),
                 recentFiles = decodeList(p[Keys.recentFiles]),
@@ -81,6 +95,16 @@ class SettingsRepository(private val context: Context) {
     suspend fun setReduceMotion(v: Boolean) = put(Keys.reduceMotion, v)
     suspend fun setNotifications(v: Boolean) = put(Keys.notifications, v)
     suspend fun setShowRecents(v: Boolean) = put(Keys.showRecents, v)
+    suspend fun setThemeStyle(v: ThemeStyle) = put(Keys.themeStyle, v.name)
+    suspend fun setThemePreset(v: String) = put(Keys.themePreset, v)
+    suspend fun setLiquidGlass(v: Boolean) = put(Keys.liquidGlass, v)
+    suspend fun setRecentsRespectHidden(v: Boolean) = put(Keys.recentsRespectHidden, v)
+    suspend fun setItemScale(v: Float) = put(Keys.itemScale, v.coerceIn(0f, 1f))
+
+    private suspend fun recentAllowed(path: String): Boolean {
+        val respect = settings.first().recentsRespectHidden
+        return !respect || withContext(Dispatchers.IO) { RecentsFilter.isAllowed(path) }
+    }
 
     suspend fun toggleBookmark(path: String) {
         context.nexusDataStore.edit { p ->
@@ -97,6 +121,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun recordRecentDir(path: String) {
+        if (!recentAllowed(path)) return
         context.nexusDataStore.edit { p ->
             if (p[Keys.showRecents] == false) return@edit
             p[Keys.recentDirs] = encodeList((listOf(path) + decodeList(p[Keys.recentDirs]).filter { it != path }).take(MAX_RECENTS))
@@ -104,6 +129,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun recordRecentFile(path: String) {
+        if (!recentAllowed(path)) return
         context.nexusDataStore.edit { p ->
             if (p[Keys.showRecents] == false) return@edit
             p[Keys.recentFiles] = encodeList((listOf(path) + decodeList(p[Keys.recentFiles]).filter { it != path }).take(MAX_RECENTS))

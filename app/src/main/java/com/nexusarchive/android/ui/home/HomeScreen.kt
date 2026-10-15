@@ -2,6 +2,7 @@
 
 package com.nexusarchive.android.ui.home
 
+import com.nexusarchive.android.ui.components.NexusSnackbarHost
 import com.nexusarchive.android.ui.components.LocalFloatingBarInset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nexusarchive.android.NexusApplication
+import com.nexusarchive.android.core.RecentsFilter
 import com.nexusarchive.android.core.FileKind
 import com.nexusarchive.android.ui.storage.ExternalStorageSection
 import com.nexusarchive.android.core.FileTypes
@@ -87,6 +89,12 @@ fun HomeScreen(
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val shownRecentDirs = remember(settings.recentDirs, settings.recentsRespectHidden) {
+        if (settings.recentsRespectHidden) settings.recentDirs.filter { RecentsFilter.isAllowed(it) } else settings.recentDirs
+    }
+    val shownRecentFiles = remember(settings.recentFiles, settings.recentsRespectHidden) {
+        if (settings.recentsRespectHidden) settings.recentFiles.filter { RecentsFilter.isAllowed(it) } else settings.recentFiles
+    }
     val safBookmarks by remember { (context.applicationContext as NexusApplication).safStorage.bookmarks }
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -98,7 +106,7 @@ fun HomeScreen(
 
     val active = operations.filter { it.isActive }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar, Modifier.padding(bottom = LocalFloatingBarInset.current)) }) { padding ->
+    Scaffold(snackbarHost = { NexusSnackbarHost(snackbar) }) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -180,9 +188,9 @@ fun HomeScreen(
                     }
                 }
 
-                if (settings.showRecents && settings.recentDirs.isNotEmpty()) {
+                if (settings.showRecents && shownRecentDirs.isNotEmpty()) {
                     item { SectionHeader("Recent folders") }
-                    items(settings.recentDirs.take(5), key = { "rd:$it" }) { path ->
+                    items(shownRecentDirs.take(5), key = { "rd:$it" }) { path ->
                         PathRow(
                             title = labelFor(path, ui.volumes),
                             subtitle = path,
@@ -192,9 +200,9 @@ fun HomeScreen(
                     }
                 }
 
-                if (settings.showRecents && settings.recentFiles.isNotEmpty()) {
+                if (settings.showRecents && shownRecentFiles.isNotEmpty()) {
                     item { SectionHeader("Recent files") }
-                    items(settings.recentFiles.take(5), key = { "rf:$it" }) { path ->
+                    items(shownRecentFiles.take(5), key = { "rf:$it" }) { path ->
                         val name = File(path).name
                         PathRow(
                             title = name,

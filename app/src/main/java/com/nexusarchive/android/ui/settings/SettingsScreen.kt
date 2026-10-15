@@ -2,6 +2,7 @@
 
 package com.nexusarchive.android.ui.settings
 
+import com.nexusarchive.android.ui.components.NexusSnackbarHost
 import com.nexusarchive.android.ui.components.LocalFloatingBarInset
 import android.os.Build
 import android.provider.Settings
@@ -50,6 +51,8 @@ import com.nexusarchive.android.data.AppSettings
 import com.nexusarchive.android.data.ConflictPolicy
 import com.nexusarchive.android.data.LayoutDensity
 import com.nexusarchive.android.data.ThemeMode
+import com.nexusarchive.android.data.ThemeStyle
+import com.nexusarchive.android.ui.theme.ThemePresets
 import com.nexusarchive.android.data.ViewMode
 import com.nexusarchive.android.ui.browse.FileActions
 import com.nexusarchive.android.ui.components.SectionHeader
@@ -67,6 +70,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val safBookmarks by remember { (context.applicationContext as NexusApplication).safStorage.bookmarks }
         .collectAsStateWithLifecycle(initialValue = emptyList())
+    var showPresets by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showLicenses by remember { mutableStateOf(false) }
@@ -74,7 +78,7 @@ fun SettingsScreen(
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Settings") }) },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { NexusSnackbarHost(snackbar) },
     ) { padding ->
         Box(
             modifier = Modifier
@@ -100,13 +104,45 @@ fun SettingsScreen(
                         selected = settings.themeMode,
                         onSelect = vm::setThemeMode,
                     )
-                    SwitchRow(
-                        title = "Dynamic color",
-                        subtitle = if (dynamicSupported) "Use colors from your wallpaper" else "Requires Android 12 or newer",
-                        checked = settings.dynamicColor && dynamicSupported,
-                        enabled = dynamicSupported,
-                        onChange = vm::setDynamicColor,
+                    ChoiceRow(
+                        title = "Colour theme",
+                        options = listOf(
+                            ThemeStyle.DEFAULT to "Default",
+                            ThemeStyle.MONET to if (dynamicSupported) "Monet (system colours)" else "Monet (needs Android 12 or newer)",
+                            ThemeStyle.PRESET to "Presets",
+                        ),
+                        selected = settings.themeStyle,
+                        onSelect = { style ->
+                            if (style == ThemeStyle.MONET && !dynamicSupported) {
+                                // Not available on this Android version; keep the current theme.
+                            } else {
+                                vm.setThemeStyle(style)
+                                if (style == ThemeStyle.PRESET) showPresets = true
+                            }
+                        },
                     )
+                    if (settings.themeStyle == ThemeStyle.PRESET) {
+                        ListItem(
+                            headlineContent = { Text("Preset") },
+                            supportingContent = { Text(ThemePresets.byId(settings.themePreset).name) },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            modifier = Modifier.clickable { showPresets = true },
+                        )
+                    }
+                    SwitchRow(
+                        title = "Liquid glass",
+                        subtitle = "Makes floating bars and buttons translucent so content shows through. Follows the active theme",
+                        checked = settings.liquidGlass,
+                        enabled = true,
+                        onChange = vm::setLiquidGlass,
+                    )
+                    if (showPresets) {
+                        PresetPickerDialog(
+                            selectedId = settings.themePreset,
+                            onSelect = vm::setThemePreset,
+                            onDismiss = { showPresets = false },
+                        )
+                    }
                     ChoiceRow(
                         title = "Layout density",
                         options = listOf(
@@ -188,6 +224,13 @@ fun SettingsScreen(
                         checked = settings.showRecents,
                         enabled = true,
                         onChange = vm::setShowRecents,
+                    )
+                    SwitchRow(
+                        title = "Keep hidden folders out of Recents",
+                        subtitle = "Skips folders that start with a dot and folders containing a .nomedia file, like gallery apps do",
+                        checked = settings.recentsRespectHidden,
+                        enabled = settings.showRecents,
+                        onChange = vm::setRecentsRespectHidden,
                     )
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
