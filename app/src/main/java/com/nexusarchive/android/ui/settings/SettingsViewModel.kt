@@ -43,6 +43,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setLiquidGlass(v: Boolean) = fire { repo.setLiquidGlass(v) }
     fun setRecentsRespectHidden(v: Boolean) = fire { repo.setRecentsRespectHidden(v) }
     fun setItemScale(v: Float) = fire { repo.setItemScale(v) }
+    fun setRememberTabs(v: Boolean) = fire { repo.setRememberTabs(v) }
+    fun setStartTab1(v: String) = fire { repo.setStartTab1(v) }
+    fun setStartTab2(v: String) = fire { repo.setStartTab2(v) }
     fun removeBookmark(path: String) = fire { repo.removeBookmark(path) }
     fun clearRecents() = fire { repo.clearRecents() }
 

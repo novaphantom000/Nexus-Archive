@@ -22,6 +22,9 @@
     <!-- Lets the user hand an APK to Android's package installer. The system still shows its own install prompt. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Lets the APK preview tell whether an app is already installed (and compare signing keys). -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
     <!-- Progress notification and the foreground service that keeps long operations alive. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

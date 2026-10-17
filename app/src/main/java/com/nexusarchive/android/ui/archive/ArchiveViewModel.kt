@@ -23,7 +23,11 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import com.nexusarchive.android.data.ViewMode
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -42,7 +46,6 @@ data class ArchiveUiState(
     val query: String = "",
     val sortField: ArchiveSortField = ArchiveSortField.NAME,
     val sortAscending: Boolean = true,
-    val grid: Boolean = false,
     val staging: Boolean = false,
 )
 
@@ -144,8 +147,9 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
 
     fun toggleSelect(path: String) {
         _ui.update { state ->
-            val next = if (path in state.selection) state.selection - path else state.selection + path
-            state.copy(selection = next)
+            val adding = path !in state.selection
+            if (adding) selectionAnchor = path
+            state.copy(selection = if (adding) state.selection + path else state.selection - path)
         }
     }
 
@@ -177,8 +181,34 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
         _ui.update { it.copy(sortAscending = !it.sortAscending) }
     }
 
-    fun toggleGrid() {
-        _ui.update { it.copy(grid = !it.grid) }
+    // View mode and item size are the same saved settings the file browser uses.
+    val itemScale: StateFlow<Float> = app.settings.settings.map { it.itemScale }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0.5f)
+    val viewMode: StateFlow<ViewMode> = app.settings.settings.map { it.viewMode }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.LIST)
+
+    fun setItemScale(value: Float) {
+        viewModelScope.launch { app.settings.setItemScale(value) }
+    }
+
+    fun setViewMode(mode: ViewMode) {
+        viewModelScope.launch { app.settings.setViewMode(mode) }
+    }
+
+    private var selectionAnchor: String? = null
+
+    /** Long-press: selects every row between the last selected one and this one, in the order shown. */
+    fun rangeSelectTo(path: String, visible: List<String>) {
+        val anchor = selectionAnchor
+        if (_ui.value.selection.isEmpty() || anchor == null || anchor !in visible) {
+            toggleSelect(path)
+            return
+        }
+        val a = visible.indexOf(anchor)
+        val b = visible.indexOf(path)
+        if (b < 0) return
+        val range = visible.subList(minOf(a, b), maxOf(a, b) + 1)
+        _ui.update { it.copy(selection = it.selection + range) }
     }
 
     fun postMessage(text: String) {
@@ -228,6 +258,7 @@ class ArchiveViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun clearSelection() {
+        selectionAnchor = null
         _ui.update { it.copy(selection = emptySet()) }
     }
 

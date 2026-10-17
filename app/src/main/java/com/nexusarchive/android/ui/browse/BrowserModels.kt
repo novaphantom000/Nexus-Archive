@@ -31,7 +31,12 @@ data class BrowserUiState(
     val pendingPaste: PendingPaste? = null,
     val pendingDelete: List<String>? = null,
     val volumes: List<StorageVolumeInfo> = emptyList(),
+    val tabs: List<BrowserTab> = emptyList(),
+    val activeTab: Int = 0,
 )
+
+/** One browser tab. Only the folder is tracked per tab; selection and search reset when you switch. */
+data class BrowserTab(val id: Long, val path: String)
 
 /** The volume whose root contains [path], preferring the deepest match. */
 fun volumeFor(path: String, volumes: List<StorageVolumeInfo>): StorageVolumeInfo? =

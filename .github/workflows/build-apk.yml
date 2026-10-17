@@ -43,6 +43,26 @@ jobs:
             echo "sdkmanager not found at $SDKM; relying on Gradle auto-download"
           fi
 
+      - name: Restore signing key (only when the repository secrets exist)
+        env:
+          KEYSTORE_B64: ${{ secrets.NEXUS_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.NEXUS_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.NEXUS_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.NEXUS_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/nexus.keystore"
+            {
+              echo "NEXUS_KEYSTORE_PATH=$RUNNER_TEMP/nexus.keystore"
+              echo "NEXUS_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+              echo "NEXUS_KEY_ALIAS=$KEY_ALIAS"
+              echo "NEXUS_KEY_PASSWORD=$KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+            echo "Using the fixed signing key."
+          else
+            echo "No signing secrets found; this build uses the default debug key and cannot update builds signed with another key."
+          fi
+
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 

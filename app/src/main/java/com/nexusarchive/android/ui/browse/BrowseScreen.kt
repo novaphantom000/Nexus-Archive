@@ -2,6 +2,19 @@
 
 package com.nexusarchive.android.ui.browse
 
+import com.nexusarchive.android.core.FileTypes
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
+import kotlin.math.abs
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import com.nexusarchive.android.ui.components.topFade
 import com.nexusarchive.android.ui.components.NexusSnackbarHost
 import com.nexusarchive.android.ui.archive.ExtractDialog
@@ -211,6 +224,11 @@ private fun BrowseContent(
     val snackbar = remember { SnackbarHostState() }
 
     var showSortSheet by remember { mutableStateOf(false) }
+    var showTabs by remember { mutableStateOf(false) }
+    var apkTarget by remember { mutableStateOf<FileEntry?>(null) }
+    val tabOffset = remember { Animatable(0f) }
+    val tabScope = androidx.compose.runtime.rememberCoroutineScope()
+    val tabSlideWidth = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
     var pathMenuOpen by remember { mutableStateOf(false) }
     var editingPath by remember { mutableStateOf(false) }
     var liveScale by remember(settings.itemScale) { mutableStateOf(settings.itemScale) }
@@ -323,6 +341,8 @@ private fun BrowseContent(
                         onUp = { vm.navigateUp() },
                         onSearch = { vm.setSearchActive(true) },
                         onSortFilter = { showSortSheet = true },
+                        tabCount = ui.tabs.size.coerceAtLeast(1),
+                        onOpenTabs = { showTabs = true },
                         onRefresh = vm::refresh,
                         onToggleHidden = { settingsVm.setShowHidden(!settings.showHidden) },
                         onToggleBookmark = vm::toggleBookmarkForCurrent,
@@ -333,25 +353,6 @@ private fun BrowseContent(
                             if (option.path != null) vm.navigateTo(option.path) else if (option.safId != null) onOpenSafStorage(option.safId)
                         },
                     )
-                }
-            }
-        },
-        bottomBar = {
-            AnimatedVisibility(
-                visible = ui.clipboard != null && ui.selection.isEmpty(),
-                enter = slideInVertically(Motion.spatial(reduce)) { it } + fadeIn(Motion.effects(reduce)),
-                exit = slideOutVertically(Motion.spatial(reduce)) { it } + fadeOut(Motion.effects(reduce)),
-            ) {
-                val clip = ui.clipboard ?: lastClipboard.value
-                if (clip != null) {
-                    Box(Modifier.padding(bottom = LocalFloatingBarInset.current)) {
-                        ClipboardBar(
-                            clipboard = clip,
-                            canPaste = ui.canWriteHere,
-                            onPaste = vm::paste,
-                            onClear = vm::clearClipboard,
-                        )
-                    }
                 }
             }
         },
@@ -373,10 +374,58 @@ private fun BrowseContent(
         },
         snackbarHost = { NexusSnackbarHost(snackbar) },
     ) { padding ->
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .pointerInput(ui.activeTab, ui.tabs.size) {
+                    var total = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { total = 0f },
+                        onHorizontalDrag = { change, amount ->
+                            change.consume()
+                            total += amount
+                            val allowed = if (total < 0f) ui.activeTab < ui.tabs.lastIndex else ui.activeTab > 0
+                            // With no tab on that side the page only gives a little, then springs back.
+                            val factor = if (allowed) 1f else 0.16f
+                            tabScope.launch {
+                                tabOffset.snapTo((tabOffset.value + amount * factor).coerceIn(-tabSlideWidth, tabSlideWidth))
+                            }
+                        },
+                        onDragEnd = {
+                            val direction = if (total < 0f) 1 else -1
+                            val target = ui.activeTab + direction
+                            tabScope.launch {
+                                if (abs(total) > tabSlideWidth * 0.22f && target in ui.tabs.indices) {
+                                    if (reduce) {
+                                        vm.selectTab(target)
+                                        tabOffset.snapTo(0f)
+                                    } else {
+                                        tabOffset.animateTo(-direction * tabSlideWidth, Motion.spatial(reduce))
+                                        vm.selectTab(target)
+                                        withTimeoutOrNull(450) {
+                                            vm.ui.first { it.activeTab == target && !it.loading }
+                                        }
+                                        tabOffset.snapTo(direction * tabSlideWidth)
+                                        tabOffset.animateTo(0f, Motion.spatial(reduce))
+                                    }
+                                } else if (reduce) {
+                                    tabOffset.snapTo(0f)
+                                } else {
+                                    tabOffset.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+                                }
+                            }
+                        },
+                        onDragCancel = {
+                            tabScope.launch { tabOffset.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy)) }
+                        },
+                    )
+                },
+        ) {
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .graphicsLayer { translationX = tabOffset.value },
         ) {
             if (ui.currentPath.isNotBlank()) {
                 if (editingPath) {
@@ -481,6 +530,7 @@ private fun BrowseContent(
                             when {
                                 ui.selection.isNotEmpty() -> vm.toggleSelect(entry.path)
                                 entry.isDirectory -> vm.navigateTo(entry.path)
+                                FileTypes.extensionOf(entry.name) == "apk" -> apkTarget = entry
                                 entry.kind == FileKind.ARCHIVE -> {
                                     val reason = ArchiveFormats.unsupportedReason(entry.name)
                                     if (reason != null) {
@@ -501,7 +551,27 @@ private fun BrowseContent(
                     )
                 }
             }
+                }
+        AnimatedVisibility(
+            visible = ui.clipboard != null && ui.selection.isEmpty(),
+            enter = slideInVertically(Motion.spatial(reduce)) { it } + fadeIn(Motion.effects(reduce)),
+            exit = slideOutVertically(Motion.spatial(reduce)) { it } + fadeOut(Motion.effects(reduce)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = LocalFloatingBarInset.current),
+        ) {
+            val clip = ui.clipboard ?: lastClipboard.value
+            if (clip != null) {
+                ClipboardBar(
+                    clipboard = clip,
+                    canPaste = ui.canWriteHere,
+                    onPaste = vm::paste,
+                    onClear = vm::clearClipboard,
+                )
+            }
         }
+        }
+
     }
 
     // ---- sheets & dialogs ---------------------------------------------------------------------
@@ -594,6 +664,41 @@ private fun BrowseContent(
 
     propertiesTarget?.let { entry ->
         PropertiesDialog(entry = entry, onDismiss = { propertiesTarget = null })
+    }
+
+    apkTarget?.let { entry ->
+        ApkPreviewSheet(
+            file = File(entry.path),
+            onBrowse = {
+                apkTarget = null
+                onOpenArchive(entry.path)
+            },
+            onInstall = {
+                apkTarget = null
+                FileActions.open(context, File(entry.path), chooser = false)?.let(vm::postMessage)
+            },
+            onMessage = vm::postMessage,
+            onDismiss = { apkTarget = null },
+        )
+    }
+
+    if (showTabs) {
+        TabSwitcherSheet(
+            tabs = ui.tabs,
+            activeIndex = ui.activeTab,
+            volumes = ui.volumes,
+            onSelect = {
+                showTabs = false
+                vm.selectTab(it)
+            },
+            onClose = vm::closeTab,
+            onMove = vm::moveTab,
+            onAdd = {
+                showTabs = false
+                vm.addTab()
+            },
+            onDismiss = { showTabs = false },
+        )
     }
 
     archiveSheetTarget?.let { entry ->
@@ -704,6 +809,8 @@ private fun NormalTopBar(
     onUp: () -> Unit,
     onSearch: () -> Unit,
     onSortFilter: () -> Unit,
+    tabCount: Int,
+    onOpenTabs: () -> Unit,
     onRefresh: () -> Unit,
     onToggleHidden: () -> Unit,
     onToggleBookmark: () -> Unit,
@@ -718,6 +825,17 @@ private fun NormalTopBar(
         actions = {
             IconButton(onClick = onSearch) { Icon(Icons.Rounded.Search, contentDescription = "Search in this folder") }
             IconButton(onClick = onSortFilter) { Icon(Icons.Rounded.FilterList, contentDescription = "Sort and filter") }
+            IconButton(onClick = onOpenTabs) {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .border(2.dp, LocalContentColor.current, RoundedCornerShape(6.dp))
+                        .semantics { contentDescription = "Tabs, $tabCount open" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(tabCount.toString(), style = MaterialTheme.typography.labelSmall)
+                }
+            }
             Box {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = "More options") }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {

@@ -14,12 +14,31 @@ android {
         applicationId = "com.nexusarchive.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.5.1"
+        // CI builds count upwards (the Actions run number), so each new build can be installed over the last one.
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0).coerceAtLeast(9)
+        versionName = "0.6.0"
+    }
+
+    // A fixed signing key (supplied through environment variables, never stored in the repo) keeps every build's
+    // signature identical, which is what lets Android treat a new build as an update instead of a different app.
+    signingConfigs {
+        val keystorePath = System.getenv("NEXUS_KEYSTORE_PATH")
+        if (!keystorePath.isNullOrBlank() && file(keystorePath).exists()) {
+            create("nexus") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("NEXUS_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("NEXUS_KEY_ALIAS")
+                keyPassword = System.getenv("NEXUS_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfigs.findByName("nexus")?.let { signingConfig = it }
+        }
         release {
+            signingConfigs.findByName("nexus")?.let { signingConfig = it }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

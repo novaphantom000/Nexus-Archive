@@ -2,6 +2,9 @@
 
 package com.nexusarchive.android.ui.archive
 
+import com.nexusarchive.android.data.ViewMode
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.Slider
 import com.nexusarchive.android.ui.components.topFade
 import com.nexusarchive.android.ui.components.NexusSnackbarHost
 import androidx.activity.compose.BackHandler
@@ -152,6 +155,9 @@ fun ArchiveScreen(
     val archiveFile = remember(path) { File(path) }
     val reduce = LocalReduceMotion.current
     val listing = ui.listing
+    val viewMode by vm.viewMode.collectAsStateWithLifecycle()
+    val savedScale by vm.itemScale.collectAsStateWithLifecycle()
+    var liveScale by remember(savedScale) { mutableStateOf(savedScale) }
     val searching = ui.searchActive && ui.query.isNotBlank()
     val searchFocus = remember { FocusRequester() }
 
@@ -311,6 +317,37 @@ fun ArchiveScreen(
                                     }
                                     HorizontalDivider()
                                     DropdownMenuItem(
+                                        text = { Text("List view") },
+                                        leadingIcon = { Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = null) },
+                                        trailingIcon = {
+                                            if (viewMode == ViewMode.LIST) Icon(Icons.Rounded.Check, contentDescription = "Selected")
+                                        },
+                                        onClick = { vm.setViewMode(ViewMode.LIST) },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Grid view") },
+                                        leadingIcon = { Icon(Icons.Rounded.GridView, contentDescription = null) },
+                                        trailingIcon = {
+                                            if (viewMode == ViewMode.GRID) Icon(Icons.Rounded.Check, contentDescription = "Selected")
+                                        },
+                                        onClick = { vm.setViewMode(ViewMode.GRID) },
+                                    )
+                                    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                                        Text(
+                                            if (viewMode == ViewMode.LIST) "Icon and row size" else "Tile size",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Slider(
+                                            value = liveScale,
+                                            onValueChange = { liveScale = it },
+                                            onValueChangeFinished = { vm.setItemScale(liveScale) },
+                                            valueRange = 0f..1f,
+                                            modifier = Modifier.widthIn(min = 200.dp),
+                                        )
+                                    }
+                                    HorizontalDivider()
+                                    DropdownMenuItem(
                                         text = { Text("Descending order") },
                                         trailingIcon = {
                                             if (!ui.sortAscending) Icon(Icons.Rounded.Check, contentDescription = "On")
@@ -321,12 +358,6 @@ fun ArchiveScreen(
                                         },
                                     )
                                 }
-                            }
-                            IconButton(onClick = vm::toggleGrid) {
-                                Icon(
-                                    imageVector = if (ui.grid) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.GridView,
-                                    contentDescription = if (ui.grid) "Show as list" else "Show as grid",
-                                )
                             }
                             Box {
                                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Rounded.MoreVert, contentDescription = "More actions") }
@@ -465,13 +496,14 @@ fun ArchiveScreen(
                     )
                     searching -> ArchiveRows(
                         rows = currentRows,
-                        grid = ui.grid,
+                        grid = viewMode == ViewMode.GRID,
+                        itemScale = liveScale,
                         selection = ui.selection,
                         showPath = true,
                         header = null,
                         emptyText = "No names in this archive match your search.",
                         onClick = ::nodeClick,
-                        onLongClick = { vm.toggleSelect(it.path) },
+                        onLongClick = { vm.rangeSelectTo(it.path, currentRows.map { row -> row.path }) },
                         onToggle = { vm.toggleSelect(it.path) },
                         reduce = reduce,
                     )
@@ -493,13 +525,14 @@ fun ArchiveScreen(
                         }
                         ArchiveRows(
                             rows = dirRows,
-                            grid = ui.grid,
+                            grid = viewMode == ViewMode.GRID,
+                            itemScale = liveScale,
                             selection = ui.selection,
                             showPath = false,
                             header = { ArchiveHeader(ui, archiveFile) },
                             emptyText = "This folder is empty.",
                             onClick = ::nodeClick,
-                            onLongClick = { vm.toggleSelect(it.path) },
+                            onLongClick = { vm.rangeSelectTo(it.path, dirRows.map { row -> row.path }) },
                             onToggle = { vm.toggleSelect(it.path) },
                             reduce = reduce,
                         )
@@ -603,6 +636,7 @@ private fun folderDepth(dir: String): Int = if (dir.isEmpty()) 0 else dir.count 
 private fun ArchiveRows(
     rows: List<TreeNode>,
     grid: Boolean,
+    itemScale: Float,
     selection: Set<String>,
     showPath: Boolean,
     header: (@Composable () -> Unit)?,
@@ -617,7 +651,7 @@ private fun ArchiveRows(
     val gridState = rememberLazyGridState()
     if (grid) {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(112.dp),
+            columns = GridCells.Adaptive((88f + 100f * itemScale).dp),
             state = gridState,
             modifier = Modifier.fillMaxSize().topFade(gridState.canScrollBackward),
             contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 4.dp, bottom = bottom),
@@ -625,6 +659,7 @@ private fun ArchiveRows(
             items(rows, key = { it.path }) { node ->
                 ArchiveCell(
                     node = node,
+                    itemScale = itemScale,
                     selected = node.path in selection,
                     onClick = { onClick(node) },
                     onLongClick = { onLongClick(node) },
@@ -652,6 +687,7 @@ private fun ArchiveRows(
             items(rows, key = { it.path }) { node ->
                 ArchiveRow(
                     node = node,
+                    itemScale = itemScale,
                     selected = node.path in selection,
                     showPath = showPath,
                     onClick = { onClick(node) },
@@ -706,6 +742,7 @@ private fun ArchiveHeader(ui: ArchiveUiState, file: File) {
 @Composable
 private fun ArchiveRow(
     node: TreeNode,
+    itemScale: Float,
     selected: Boolean,
     showPath: Boolean,
     onClick: () -> Unit,
@@ -732,7 +769,7 @@ private fun ArchiveRow(
             SelectableLeading(
                 kind = if (node.isDirectory) FileKind.FOLDER else kind,
                 selected = selected,
-                size = 44.dp,
+                size = (32f + 40f * itemScale).dp,
                 onToggle = onToggle,
             )
         },
@@ -744,6 +781,7 @@ private fun ArchiveRow(
 @Composable
 private fun ArchiveCell(
     node: TreeNode,
+    itemScale: Float,
     selected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -764,7 +802,7 @@ private fun ArchiveCell(
             SelectableLeading(
                 kind = if (node.isDirectory) FileKind.FOLDER else kind,
                 selected = selected,
-                size = 56.dp,
+                size = (40f + 48f * itemScale).dp,
                 onToggle = onToggle,
             )
             Text(

@@ -2,6 +2,13 @@
 
 package com.nexusarchive.android.ui.settings
 
+import java.io.File
+import com.nexusarchive.android.ui.components.buildLocationOptions
+import com.nexusarchive.android.core.StorageVolumes
+import com.nexusarchive.android.core.StorageVolumeInfo
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.runtime.produceState
 import com.nexusarchive.android.ui.components.NexusSnackbarHost
 import com.nexusarchive.android.ui.components.LocalFloatingBarInset
 import android.os.Build
@@ -71,6 +78,12 @@ fun SettingsScreen(
     val safBookmarks by remember { (context.applicationContext as NexusApplication).safStorage.bookmarks }
         .collectAsStateWithLifecycle(initialValue = emptyList())
     var showPresets by remember { mutableStateOf(false) }
+    var chooseStartTab by remember { mutableStateOf(0) }
+    val volumes by produceState(initialValue = emptyList<StorageVolumeInfo>()) {
+        value = withContext(Dispatchers.IO) { StorageVolumes.detect(context) }
+    }
+    val startTabOptions = remember(volumes, settings.bookmarks) { buildLocationOptions(volumes, settings.bookmarks, emptyList()) }
+    fun startTabLabel(path: String): String = if (path.isBlank()) "Internal storage" else File(path).name.ifEmpty { path }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showLicenses by remember { mutableStateOf(false) }
@@ -215,6 +228,43 @@ fun SettingsScreen(
                         enabled = !systemAnimationsOff,
                         onChange = vm::setReduceMotion,
                     )
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+
+                    SectionHeader("Tabs")
+                    SwitchRow(
+                        title = "Remember tabs",
+                        subtitle = "Keep the same tabs, and the folder each one shows, after the app restarts. At least two tabs always stay open",
+                        checked = settings.rememberTabs,
+                        enabled = true,
+                        onChange = vm::setRememberTabs,
+                    )
+                    ListItem(
+                        headlineContent = { Text("Start tab 1") },
+                        supportingContent = {
+                            Text(startTabLabel(settings.startTab1) + if (settings.rememberTabs) " (used when Remember tabs is off)" else "")
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        modifier = Modifier.clickable { chooseStartTab = 1 },
+                    )
+                    ListItem(
+                        headlineContent = { Text("Start tab 2") },
+                        supportingContent = {
+                            Text(startTabLabel(settings.startTab2) + if (settings.rememberTabs) " (used when Remember tabs is off)" else "")
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        modifier = Modifier.clickable { chooseStartTab = 2 },
+                    )
+                    if (chooseStartTab != 0) {
+                        FolderChooserDialog(
+                            title = "Start tab $chooseStartTab",
+                            options = startTabOptions,
+                            onPick = { path ->
+                                if (chooseStartTab == 1) vm.setStartTab1(path) else vm.setStartTab2(path)
+                                chooseStartTab = 0
+                            },
+                            onDismiss = { chooseStartTab = 0 },
+                        )
+                    }
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
                     SectionHeader("Privacy")

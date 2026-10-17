@@ -1,5 +1,6 @@
 package com.nexusarchive.android.data
 
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
 import com.nexusarchive.android.core.RecentsFilter
 import kotlinx.coroutines.withContext
@@ -44,6 +45,11 @@ class SettingsRepository(private val context: Context) {
         val liquidGlass = booleanPreferencesKey("liquid_glass")
         val recentsRespectHidden = booleanPreferencesKey("recents_respect_hidden")
         val itemScale = floatPreferencesKey("item_scale")
+        val rememberTabs = booleanPreferencesKey("remember_tabs")
+        val savedTabs = stringPreferencesKey("saved_tabs_json")
+        val activeTab = intPreferencesKey("active_tab")
+        val startTab1 = stringPreferencesKey("start_tab_1")
+        val startTab2 = stringPreferencesKey("start_tab_2")
         val bookmarks = stringPreferencesKey("bookmarks_json")
         val recentDirs = stringPreferencesKey("recent_dirs_json")
         val recentFiles = stringPreferencesKey("recent_files_json")
@@ -74,6 +80,11 @@ class SettingsRepository(private val context: Context) {
                 liquidGlass = p[Keys.liquidGlass] ?: d.liquidGlass,
                 recentsRespectHidden = p[Keys.recentsRespectHidden] ?: d.recentsRespectHidden,
                 itemScale = p[Keys.itemScale] ?: d.itemScale,
+                rememberTabs = p[Keys.rememberTabs] ?: d.rememberTabs,
+                savedTabs = decodeList(p[Keys.savedTabs]),
+                activeTab = p[Keys.activeTab] ?: d.activeTab,
+                startTab1 = p[Keys.startTab1] ?: d.startTab1,
+                startTab2 = p[Keys.startTab2] ?: d.startTab2,
                 bookmarks = decodeList(p[Keys.bookmarks]),
                 recentDirs = decodeList(p[Keys.recentDirs]),
                 recentFiles = decodeList(p[Keys.recentFiles]),
@@ -100,6 +111,16 @@ class SettingsRepository(private val context: Context) {
     suspend fun setLiquidGlass(v: Boolean) = put(Keys.liquidGlass, v)
     suspend fun setRecentsRespectHidden(v: Boolean) = put(Keys.recentsRespectHidden, v)
     suspend fun setItemScale(v: Float) = put(Keys.itemScale, v.coerceIn(0f, 1f))
+    suspend fun setRememberTabs(v: Boolean) = put(Keys.rememberTabs, v)
+    suspend fun setStartTab1(v: String) = put(Keys.startTab1, v)
+    suspend fun setStartTab2(v: String) = put(Keys.startTab2, v)
+
+    suspend fun setSavedTabs(paths: List<String>, active: Int) {
+        context.nexusDataStore.edit { p ->
+            p[Keys.savedTabs] = encodeList(paths)
+            p[Keys.activeTab] = active
+        }
+    }
 
     private suspend fun recentAllowed(path: String): Boolean {
         val respect = settings.first().recentsRespectHidden

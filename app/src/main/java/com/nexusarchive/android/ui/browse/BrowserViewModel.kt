@@ -69,8 +69,13 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     private var started = false
     private var loadJob: Job? = null
+    private var tabIdCounter = 0L
+    private var tabsInitializing = false
+    private var openAfterInit: String? = null
+    private var rememberTabs = true
 
     init {
+        viewModelScope.launch { settingsRepo.settings.collect { rememberTabs = it.rememberTabs } }
         refreshVolumes()
         viewModelScope.launch {
             operations.changes.collect { refresh() }
@@ -94,21 +99,114 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun ensureStarted() {
         if (!started) {
             started = true
-            viewModelScope.launch {
-                val volumes = withContext(Dispatchers.IO) { StorageVolumes.detect(app) }
-                _ui.update { it.copy(volumes = volumes) }
-                val start = volumes.firstOrNull { it.isPrimary }?.path ?: volumes.firstOrNull()?.path ?: "/storage/emulated/0"
-                load(start)
-            }
+            initTabs(null)
         } else if (_listing.value?.failure != null) {
             refresh()
+        }
+    }
+
+    /**
+     * Builds the first set of tabs: the saved ones when "remember tabs" is on, otherwise the two start folders
+     * chosen in Settings (internal storage by default). There are always at least two tabs.
+     */
+    private fun initTabs(thenOpen: String?) {
+        if (thenOpen != null) openAfterInit = thenOpen
+        if (tabsInitializing || _ui.value.tabs.isNotEmpty()) return
+        tabsInitializing = true
+        viewModelScope.launch {
+            val volumes = withContext(Dispatchers.IO) { StorageVolumes.detect(app) }
+            val primary = volumes.firstOrNull { it.isPrimary }?.path ?: volumes.firstOrNull()?.path ?: "/storage/emulated/0"
+            val s = settingsRepo.current()
+            val base: List<String> = withContext(Dispatchers.IO) {
+                if (s.rememberTabs) {
+                    val saved = s.savedTabs.filter { File(it).isDirectory }
+                    when {
+                        saved.size >= 2 -> saved
+                        saved.size == 1 -> saved + primary
+                        else -> listOf(primary, primary)
+                    }
+                } else {
+                    listOf(s.startTab1, s.startTab2).map { if (it.isNotBlank() && File(it).isDirectory) it else primary }
+                }
+            }
+            val active = if (s.rememberTabs) s.activeTab.coerceIn(0, base.lastIndex) else 0
+            val paths = base.toMutableList()
+            val open = openAfterInit
+            openAfterInit = null
+            if (open != null) paths[active] = open
+            val tabs = paths.map { BrowserTab(++tabIdCounter, it) }
+            _ui.update { it.copy(volumes = volumes, tabs = tabs, activeTab = active) }
+            tabsInitializing = false
+            load(paths[active])
         }
     }
 
     fun navigateTo(path: String) {
         started = true
         _ui.update { it.copy(selection = emptySet(), searchActive = false, query = "") }
-        load(path)
+        if (_ui.value.tabs.isEmpty()) initTabs(path) else load(path)
+    }
+
+    // ---- tabs ---------------------------------------------------------------------------------
+
+    private fun persistTabs() {
+        if (!rememberTabs) return
+        val s = _ui.value
+        if (s.tabs.isEmpty()) return
+        viewModelScope.launch { settingsRepo.setSavedTabs(s.tabs.map { it.path }, s.activeTab) }
+    }
+
+    fun selectTab(index: Int) {
+        val s = _ui.value
+        if (index !in s.tabs.indices || index == s.activeTab) return
+        _ui.update { it.copy(activeTab = index, selection = emptySet(), searchActive = false, query = "") }
+        load(s.tabs[index].path)
+        persistTabs()
+    }
+
+    /** Opens a new tab on [path] (the current folder by default) and switches to it. */
+    fun addTab(path: String? = null) {
+        val s = _ui.value
+        val target = path ?: s.currentPath.ifBlank { s.volumes.firstOrNull()?.path ?: "/storage/emulated/0" }
+        val tab = BrowserTab(++tabIdCounter, target)
+        _ui.update { it.copy(tabs = it.tabs + tab, activeTab = it.tabs.size, selection = emptySet(), searchActive = false, query = "") }
+        load(target)
+        persistTabs()
+    }
+
+    /** Closes a tab. At least two tabs always stay open. */
+    fun closeTab(index: Int) {
+        val s = _ui.value
+        if (index !in s.tabs.indices) return
+        if (s.tabs.size <= 2) {
+            postMessage("At least two tabs stay open.")
+            return
+        }
+        val remaining = s.tabs.filterIndexed { i, _ -> i != index }
+        val closedActive = index == s.activeTab
+        val newActive = when {
+            index < s.activeTab -> s.activeTab - 1
+            closedActive -> s.activeTab.coerceAtMost(remaining.lastIndex)
+            else -> s.activeTab
+        }
+        _ui.update { it.copy(tabs = remaining, activeTab = newActive) }
+        if (closedActive) {
+            _ui.update { it.copy(selection = emptySet(), searchActive = false, query = "") }
+            load(remaining[newActive].path)
+        }
+        persistTabs()
+    }
+
+    /** Moves a tab to another position; the active tab stays the same tab. */
+    fun moveTab(from: Int, to: Int) {
+        val s = _ui.value
+        if (from !in s.tabs.indices || to !in s.tabs.indices || from == to) return
+        val activeId = s.tabs[s.activeTab].id
+        val list = s.tabs.toMutableList()
+        val item = list.removeAt(from)
+        list.add(to, item)
+        _ui.update { it.copy(tabs = list, activeTab = list.indexOfFirst { t -> t.id == activeId }.coerceAtLeast(0)) }
+        persistTabs()
     }
 
     /** Navigates to the parent folder. Returns false when already at a storage root. */
@@ -142,8 +240,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     loading = false,
                     canWriteHere = writable && listing.failure == null,
                     selection = s.selection.filterTo(HashSet()) { it in existing },
+                    tabs = s.tabs.mapIndexed { i, tab -> if (i == s.activeTab) tab.copy(path = path) else tab },
                 )
             }
+            persistTabs()
             if (result is ListResult.Success) settingsRepo.recordRecentDir(path)
         }
     }

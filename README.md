@@ -4,10 +4,10 @@ An Android file manager (Kotlin, Jetpack Compose, Material 3) that is growing in
 
 > **Verification status (read this first)**
 >
-> - **0.1.0 to 0.4.0** were built by the GitHub Action and installed by the project owner (screenshots of 0.3.x and
->   0.4.0 running were shared). That says nothing about every feature.
-> - **0.5.0** (this version) is a large theme and interaction update. **None of it has been compiled, run or tested.**
->   It was written in an environment with no Android SDK, Gradle or network.
+> - **0.1.0 to 0.5.1** were built by the GitHub Action (the owner reported 0.5.1 green) and installed on a device.
+> - **0.6.0** (this version) adds tabs, the APK preview, upgrade-in-place signing and archive-browser parity.
+>   **None of it has been compiled, run or tested.** It was written in an environment with no Android SDK,
+>   Gradle or network.
 > - Treat everything marked "source only" as unproven until a green run and a device test say otherwise.
 >   If a run is red, copy the **first** error line from the failing step.
 
@@ -66,6 +66,32 @@ writes; symlinks never followed; operations screen with real counters and cancel
 Limits: Android 15 caps how long a data-sync foreground service may run; the service stops cleanly when told to, which would
 end its protection for very long jobs. Operations still do not survive the process being killed.
 
+### New in 0.6.0 (source only, never compiled)
+
+| Area | What changed | Where |
+|---|---|---|
+| Paste / extract bar | No longer reserves a solid strip at the bottom; it floats over the list (above the pill) so content stays visible behind it | `BrowseScreen` |
+| Tabs | At least two tabs always. A tab button (with the tab count) sits in the top bar and opens a sheet to switch, add, close (never below two), reorder (earlier/later arrows) and choose grid or list layout. Swipe sideways on the list to go to the previous/next tab with a slide; at the first or last tab the page gives a little and springs back. The clipboard is shared, so copy in one tab and paste in another | `BrowserViewModel`, `TabSwitcherSheet`, `BrowseScreen` |
+| Tab settings | Settings > Tabs: **Remember tabs** (restores them after a restart), or turn it off and pick the folder for **Start tab 1** and **Start tab 2** (internal storage by default) | `SettingsScreen` |
+| APK preview | Tapping an `.apk` opens a sheet: icon, name, version, **Browse** (opens the APK as an archive) and **Install / Update / Reinstall**. An expandable **Information** section shows package name, version, SDKs, size, signer and SHA-256/SHA-1, install state, installed-on and updated-on, UID, install and data directories, plus expandable Permissions, Activities, Services, Providers and Receivers. The menu has On Play Store, Open system app info and Copy signature. It warns when the installed copy has a different signing key or a newer version. Installing still goes through Android's installer | `ApkInspector`, `ApkPreviewSheet` |
+| Archive browser parity | Long-press range selection; List/Grid and the size slider now live in the archive's sort menu and share the file browser's saved settings; same path editing, fade, snackbar, location dropdown and selection bar | `ArchiveScreen` |
+| Upgrade in place | The build can sign with a fixed key supplied through repository secrets, and the version code is the Actions run number, so each new build installs over the previous one (see below) | `app/build.gradle.kts`, workflow |
+
+#### Signing so updates install over each other
+
+Android only installs an APK over an existing app if both have the **same signing key** and the new **version code is
+higher**. Without secrets, every Actions run signs with a fresh random debug key, so each build looks like a different
+app. To fix that once:
+
+1. Create a key (in a Codespace, or anywhere with Java): `keytool -genkeypair -v -keystore nexus.keystore -alias nexus -keyalg RSA -keysize 4096 -validity 10000`
+2. Encode it: `base64 -w0 nexus.keystore > nexus.b64`
+3. Add four repository secrets (Settings > Secrets and variables > Actions): `NEXUS_KEYSTORE_BASE64` (the contents of `nexus.b64`), `NEXUS_KEYSTORE_PASSWORD`, `NEXUS_KEY_ALIAS` (nexus), `NEXUS_KEY_PASSWORD`.
+4. **Never commit the keystore** (`*.keystore` is already ignored) and keep a private backup: if the key is lost, future builds can't update installed copies.
+5. The first build signed with the new key can't replace builds signed with the old random key: uninstall the old app once (this clears its data), then every later build updates normally.
+
+Tabs limits: each tab remembers only its folder (no per-tab back history; selection and search reset when you switch),
+and the landscape two-pane view is not built.
+
 ### New in 0.5.0 (source only, never compiled)
 
 | Area | What changed | Where |
@@ -82,15 +108,36 @@ end its protection for very long jobs. Operations still do not survive the proce
 | Recents | Settings > Privacy: new switch to keep dot-folders and `.nomedia` folders out of Recents (on by default); applied when recording and when showing | `RecentsFilter` |
 | Fixes | Browse title no longer clipped by its rounded highlight; paste bar is one floating card with matching corner radii | `LocationPicker.kt`, `ClipboardBar` |
 
-### Not built yet (planned in this order)
+### Not built yet (everything requested so far that is still open)
 
-1. **Tabs** (at least two always open, add/close/reorder, grid or list tab view, swipe between tabs with a bounce at the ends, saved or fixed start tabs set in Settings, clipboard shared across tabs). Everything below depends on this.
-2. Extract through the clipboard (Clear / Extract bar) and the merge / skip / keep-both prompts with Remember.
-3. Landscape split view with two tabs, scrollbar, camera-cutout safe area.
-4. Splash screen and the first-launch setup and intro.
-5. Row details: time next to the date, item count on folders, special icons for Android, DCIM, Documents, Download, Music, Movies, Pictures, Ringtones, Alarms and Games.
-6. Drag-to-select on the icon, pull-down storage card, compression ratio card.
-7. Built-in text editor, image viewer, document reader, video player (Media3 ExoPlayer; mpvEx's libmpv is not being embedded because its native build can't be verified here) and music player, plus the "open with" chooser and a restructured Settings.
+Rule going forward: any file-browser feature is also applied to the archive browser.
+
+1. **Extract through the clipboard.** Extract... becomes a Clear / Extract bar you can carry to any folder or tab, plus the
+   conflict prompts (Merge and Skip as big buttons; Cancel and Keep both as small text; a Remember choice for the current
+   operation), shown only when a name already exists.
+2. **Landscape.** Pill stays put with icons and letters rotating (expressive animation); the browser splits into two panes
+   showing two different tabs (sideways swipe only when there is a third tab; the same tab never on both sides); a Material
+   scrollbar per pane; nothing under the camera cut-out; a setting to turn the split off. Needs per-pane browser state.
+3. **Splash screen and first launch.** Themed splash (logo, "Nexus Archive", liquid-glass aware); setup page with Visual
+   quality, Theme mode, Themes and Liquid glass dropdowns; Next/Back pill buttons that collapse on scroll; essential steps,
+   then optional steps with a Skip circle and confirmation; then the animated feature intro.
+4. **Glass and visual quality.** The "Apply frosted glass on other elements" sub-toggle, a true backdrop blur (needs an extra
+   library), visual-quality modes (low / quality) and an OLED dark theme.
+5. **Row details.** Time (HH:MM:SS AM/PM) beside the date on the right, item count on folders instead of the date, and special
+   icons for Android, DCIM, Documents, Download, Music, Movies, Pictures, Ringtones, Alarms and Games (switchable).
+6. **Drag-to-select** from the icon, the **pull-down card** (free of total space, folder size, refresh) and the
+   **compression-ratio card** in archives.
+7. **Archives.** More formats (RAR and the rest), multipart archives, archive editing (this will enable a New button and
+   Rename inside archives), saved passwords.
+8. **Built-in apps** (all in this one app, same theme): Nexus text editor, image viewer (crop, zoom, wallpaper, delete,
+   properties, share), document reader, video player (Media3 ExoPlayer; mpvEx's libmpv is not embedded because its native
+   build can't be verified here) and music player; a chooser from the app icon; an "open with" list that offers other apps
+   first with Just once / Always (resettable in Settings); intent filters so they appear when other apps open files.
+9. **Settings restructure** into grouped pages with many more options.
+10. **Motion pass.** Expressive transitions for opening Search and Settings and everywhere one is still missing, plus a jank
+    audit.
+11. Older open items: previews beyond images, search across external storage and history, favourites, duplicate finder,
+    file comparison, persistent operation history, Shizuku/root, TalkBack audit.
 
 ### New in 0.4.0 (source only, never compiled)
 
